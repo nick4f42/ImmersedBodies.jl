@@ -194,12 +194,14 @@ end
 solvertype(::Problem{<:PsiOmegaFluidGrid{CNAB}}) = SolverPsiOmegaGridCNAB
 
 function prescribe_motion!(state::StatePsiOmegaGridCNAB, solver::SolverPsiOmegaGridCNAB)
-    bodies = solver.prob.bodies
+    prob = solver.prob
+    bodies = prob.bodies
+    fluidframe = prob.fluid.frame
     panels = quantities(state).panels
 
     for (i, (bodypanels, body)) in enumerate(zip(panels.perbody, bodies))
-        if body isa RigidBody && !(body isa RigidBody{DiscretizationFrame})
-            prescribe_motion!(bodypanels, body, state.t)
+        if body isa RigidBody && !is_static(body, fluidframe)
+            prescribe_motion!(bodypanels, fluidframe, body, state.t)
             update!(solver.reg, bodypanels, i)
         end
     end

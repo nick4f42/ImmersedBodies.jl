@@ -7,7 +7,7 @@ using ..ImmersedBodies.Curves
 using StaticArrays
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, body_segment_length
-export RigidBody
+export RigidBody, is_static
 
 # typeof(@view matrix[i:j, :])
 const MatrixRowView{T} = SubArray{
@@ -58,7 +58,7 @@ function body_segment_length end
     RigidBody(
         pos::AbstractMatrix{Float64},
         len::AbstractVector{Float64},
-        motion::AbstractFrame=DiscretizationFrame()
+        frame::AbstractFrame=DiscretizationFrame()
     ) :: AbstractBody
 
 A rigid body with optional prescribed motion.
@@ -82,20 +82,24 @@ initial_lengths!(ds, body::RigidBody) = ds .= body.len
     RigidBody(
         fluid::AbstractFluid,
         curve::Curve,
-        motion::PrescribedMotion=FollowFrame(DiscretizationFrame())
+        frame::AbstractFrame=DiscretizationFrame(),
     ) :: AbstractBody
 
 # Arguments
 - `fluid`: The fluid that the body will be simulated in.
 - `curve`: The curve that defines the shape of the rigid body.
-- `motion`: Prescribed motion of the body.
+- `frame`: Prescribed motion of the body.
 """
-function RigidBody(fluid::AbstractFluid, curve::Curve, motion=DiscretizationFrame())
+function RigidBody(fluid::AbstractFluid, curve::Curve, frame=DiscretizationFrame())
     segments = partition(curve, body_segment_length(fluid))
-    return RigidBody(segments.points, segments.lengths, motion)
+    return RigidBody(segments.points, segments.lengths, frame)
 end
 
 npanels(body::RigidBody) = length(body.len)
+
+is_static(body::RigidBody{DiscretizationFrame}, ::AbstractFrame) = true
+is_static(body::RigidBody{F}, ::F) where {F<:BaseFrame} = true
+is_static(body::RigidBody, ::AbstractFrame) = false
 
 """
     BodyGroup(bodies::Vector{<:AbstractBody})
@@ -180,16 +184,20 @@ Return the [`Panels`](@ref) of a state.
 """
 function bodypanels end
 
-function prescribe_motion!(::PanelView, ::RigidBody, t::Float64)
+function prescribe_motion!(::PanelView, ::AbstractFrame, ::RigidBody, t::Float64)
     # TODO: Implement prescribed for other reference frames
     throw(ArgumentError("unsupported reference frame"))
 end
 
-prescribe_motion!(::PanelView, ::RigidBody{DiscretizationFrame}, ::Float64) = nothing
+function prescribe_motion!(
+    ::PanelView, ::F1, ::RigidBody{F2}, ::Float64
+) where {F1<:BaseFrame,F2<:Union{F1,DiscretizationFrame}}
+    return nothing
+end
 
 function prescribe_motion!(
-    panels::PanelView, body::RigidBody{OffsetFrame{DiscretizationFrame}}, t::Float64
-)
+    panels::PanelView, ::F1, body::RigidBody{OffsetFrame{F2}}, t::Float64
+) where {F1<:BaseFrame,F2<:Union{F1,DiscretizationFrame}}
     f = body.frame(t) # evaluate frame at time t
     r0 = f.r
     v0 = f.v
