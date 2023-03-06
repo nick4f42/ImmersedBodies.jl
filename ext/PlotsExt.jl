@@ -1,6 +1,6 @@
-module Recipes
+module PlotsExt
 
-using ..Quantities
+using ImmersedBodies.Quantities
 using Plots
 
 @recipe function f(val::GridValue{<:Number,2})
@@ -31,8 +31,9 @@ end
     # TODO: Only include sublevels that are inside the given xlims, ylims
     lastaxis = axes(val, ndims(val))
     for i in reverse(lastaxis)
-        @series (val.coords[i]..., transpose(val.array[:, :, i]))
+        subarray = @view val.array[:, :, i]
+        @series (val.coords[i]..., transpose(subarray))
     end
 end
 
-end # module Recipes
+end # module

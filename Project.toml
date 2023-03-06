@@ -29,6 +29,12 @@ LinearMaps = "3"
 Plots = "1"
 StaticArrays = "1"
 
+[weakdeps]
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+
+[extensions]
+PlotsExt = "Plots"
+
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 

@@ -26,6 +26,5 @@ quantity(f) = ArrayQuantity(f)
 
 include("quantity-types.jl")
 include("quantity-funcs.jl")
-include("plotting.jl")
 
 end # module Quantities

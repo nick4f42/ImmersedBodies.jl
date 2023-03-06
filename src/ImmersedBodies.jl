@@ -43,4 +43,8 @@ include("solving/solving.jl")
 include("solvers/solvers.jl")
 using .Solvers
 
+if !isdefined(Base, :get_extension)
+    include("../ext/PlotsExt.jl")
+end
+
 end # module ImmersedBodies
