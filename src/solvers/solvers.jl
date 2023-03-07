@@ -3,7 +3,7 @@ module Solvers
 using ...ImmersedBodies
 using ...ImmersedBodies.Bodies
 using ...ImmersedBodies.Quantities
-import ...ImmersedBodies: advance!, solve!, statetype, solvertype
+import ...ImmersedBodies: advance!, solve!, statetype, solvertype, _show
 import ...ImmersedBodies: gridstep, default_gridstep
 import ...ImmersedBodies: timevalue, timeindex, timestep_scheme, conditions, discretized
 import ...ImmersedBodies.Bodies: body_segment_length, bodypanels, prescribe_motion!

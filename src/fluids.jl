@@ -46,3 +46,5 @@ function conditions end
 The [`FluidDiscretization`](@ref) of a fluid.
 """
 function discretized end
+
+Base.show(io::IO, ::MIME"text/plain", fluid::AbstractFluid) = _show(io, fluid)

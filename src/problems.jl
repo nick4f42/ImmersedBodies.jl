@@ -32,6 +32,16 @@ end
 
 timestep(scheme::CNAB) = scheme.dt
 
+function Base.show(io::IO, ::MIME"text/plain", scheme::CNAB)
+    n = length(scheme.β)
+    if get(io, :compact, false)
+        print(io, n, "-step CNAB scheme: dt=", scheme.dt)
+    else
+        print(io, n, "-step Crank-Nicolson/Adams-Bashforth (CNAB) scheme: dt=", scheme.dt)
+    end
+    return nothing
+end
+
 """
     default_scheme([T,] grid; Umax, [cfl], [safety])
 
@@ -85,6 +95,15 @@ end
 
 function Problem(_, _)
     throw(ArgumentError("there is no default scheme for the given fluid and bodies"))
+end
+
+function Base.show(io::IO, ::MIME"text/plain", prob::Problem)
+    summary(io, prob)
+    println(io, ':')
+    _show(io, prob.fluid, "  ")
+    println(io)
+    _show(io, prob.bodies, "  ")
+    return nothing
 end
 
 """

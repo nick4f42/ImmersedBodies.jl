@@ -68,6 +68,11 @@ end
 
 arclength(line::LineSegment) = hypot((line.p2 .- line.p1)...)
 
+function Base.show(io::IO, ::MIME"text/plain", line::LineSegment)
+    print(io, "LineSegment: from ", line.p1, " to ", line.p2)
+    return nothing
+end
+
 function partition(line::LineSegment, n::Integer)
     @assert n > 1
 
@@ -97,6 +102,11 @@ function (circle::Circle)(t)
 end
 
 arclength(circle::Circle) = 2 * pi * circle.r
+
+function Base.show(io::IO, ::MIME"text/plain", circle::Circle)
+    print(io, "Circle: radius=", circle.r, ", center=", circle.center)
+    return nothing
+end
 
 function partition(circle::Circle, n::Integer)
     x0, y0 = circle.center

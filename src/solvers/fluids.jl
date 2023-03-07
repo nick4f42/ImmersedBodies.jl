@@ -10,6 +10,11 @@ A flow with velocity `velocity(t) = (ux, uy)` (defaults to zero) and Reynold's n
 """
 FreestreamFlow(velocity=t -> (0.0, 0.0); Re) = FreestreamFlow(velocity, Re)
 
+function Base.show(io::IO, ::MIME"text/plain", flow::FreestreamFlow)
+    print(io, "FreestreamFlow with Re=", flow.Re)
+    return nothing
+end
+
 """
     UniformGrid(h, xspan, yspan) :: FluidDiscretization
 
@@ -57,6 +62,21 @@ gridstep(grid::UniformGrid) = grid.h
 Return `AbstractRange`s of the x and y coordinates in `grid`.
 """
 xycoords(grid::UniformGrid) = (grid.xs, grid.ys)
+
+function Base.show(io::IO, ::MIME"text/plain", grid::UniformGrid)
+    (x1, x2), (y1, y2) = map(extrema, xycoords(grid))
+    print(io, "UniformGrid:")
+
+    xspan, yspan = map(extrema, xycoords(grid))
+    if get(io, :compact, false)
+        print(io, " gridstep=", gridstep(grid), ", xspan=", xspan, ", yspan=", yspan)
+    else
+        print(io, "\n  gridstep = ", grid.h)
+        print(io, "\n     xspan = ", xspan)
+        print(io, "\n     yspan = ", yspan)
+    end
+    return nothing
+end
 
 """
     scale(grid::UniformGrid, k) :: UniformGrid
@@ -118,6 +138,31 @@ The grid step of the `lev`th level.
 """
 gridstep(grid::MultiLevelGrid) = gridstep(baselevel(grid))
 gridstep(grid::MultiLevelGrid, lev::Int) = gridstep(grid.base) * 2.0^(lev - 1)
+
+function Base.show(io::IO, ::MIME"text/plain", grids::MultiLevelGrid)
+    nlev = nlevels(grids)
+    print(io, nlev, "-level MultiLevelGrid:")
+
+    if get(io, :compact, false)
+        basestep = gridstep(baselevel(grids))
+        xspan, yspan = map(extrema, xycoords(sublevel(grids, nlev)))
+        print(io, " base_gridstep=", basestep, ", xspan=", xspan, ", yspan=", yspan)
+        return nothing
+    end
+
+    let grid = baselevel(grids), (xspan, yspan) = map(extrema, xycoords(grid))
+        print(io, "\n  base level:")
+        print(io, " gridstep=", gridstep(grid), ", xspan=", xspan, ", yspan=", yspan)
+    end
+    if nlev > 1
+        let grid = sublevel(grids, nlev), (xspan, yspan) = map(extrema, xycoords(grid))
+            print(io, "\n  last level:")
+            print(io, " gridstep=", gridstep(grid), ", xspan=", xspan, ", yspan=", yspan)
+        end
+    end
+
+    return nothing
+end
 
 struct PsiOmegaGridIndexing
     nx::Int # Number of x grid cells
@@ -193,6 +238,31 @@ end
 conditions(fluid::PsiOmegaFluidGrid) = fluid.flow
 discretized(fluid::PsiOmegaFluidGrid) = fluid.grid
 timestep_scheme(fluid::PsiOmegaFluidGrid) = fluid.scheme
+
+function _show(io::IO, fluid::PsiOmegaFluidGrid, prefix)
+    if get(io, :compact, false)
+        print(io, prefix, "PsiOmegaFluidGrid: Re=", fluid.Re, " frame=", fluid.frame)
+        return nothing
+    end
+
+    ioc = IOContext(io, :compact => true)
+    mime = MIME("text/plain")
+    print(io, prefix, "PsiOmegaFluidGrid:")
+
+    print(ioc, '\n', prefix, "    flow = ")
+    show(ioc, mime, fluid.flow)
+
+    print(ioc, '\n', prefix, "    grid = ")
+    show(ioc, mime, fluid.grid)
+
+    print(ioc, '\n', prefix, "  scheme = ")
+    show(ioc, mime, fluid.scheme)
+
+    print(ioc, '\n', prefix, "   frame = ")
+    show(ioc, mime, fluid.frame)
+
+    return nothing
+end
 
 # The x and y coordinates of the gridpoints where x-flux is stored.
 xflux_ranges(grid::UniformGrid) = (grid.xs, midpoints(grid.ys))

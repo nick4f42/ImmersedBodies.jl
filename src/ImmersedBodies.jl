@@ -26,6 +26,8 @@ export Callback, ValueGroup, solve, solve!, timestep_count, quantity_values
 
 export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
 
+_show(io::IO, x) = _show(io, x, "")
+
 include("dynamics.jl")
 using .Dynamics
 

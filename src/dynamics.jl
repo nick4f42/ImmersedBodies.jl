@@ -83,6 +83,11 @@ struct OffsetFrame{F<:BaseFrame} <: AbstractFrame
     base::F
 end
 
+function Base.show(io::IO, ::MIME"text/plain", frame::OffsetFrame)
+    print(io, "OffsetFrame: offset from ", frame.base)
+    return nothing
+end
+
 """
     OffsetFrameInstant(r, v, θ, Ω)
 
