@@ -13,9 +13,6 @@ function quantity_values(data::Union{HDF5.Group,HDF5.Dataset})
     return quantity_values(Val(type), data)
 end
 
-last_dim_slices(a::AbstractArray) = eachslice(a; dims=ndims(a))
-last_dim_slices(v::AbstractVector) = v
-
 """
     DatasetArray{T,N}
 
@@ -35,6 +32,23 @@ function Base.getindex(array::DatasetArray, indices...)
     n = ndims(array)
     @assert all(==(1), indices[(n + 1):end])
     return array[indices[1:n]...]
+end
+
+struct DatasetArrayViews{T,N,A<:Union{Number,Array{T}}} <: AbstractVector{A}
+    array::DatasetArray{T,N}
+    function DatasetArrayViews(array::DatasetArray{T,1}) where {T}
+        return new{T,1,T}(array)
+    end
+    function DatasetArrayViews(array::DatasetArray{T,N}) where {T,N}
+        A = Array{T,N - 1}
+        return new{T,N,A}(array)
+    end
+end
+
+Base.size(views::DatasetArrayViews) = (size(views.array, ndims(views.array)),)
+function Base.getindex(views::DatasetArrayViews, i::Integer)
+    slices = ntuple(_ -> :, ndims(views.array) - 1)
+    return views.array[slices..., i]
 end
 
 struct ArrayDiskSaver <: QuantityDiskSaver
@@ -67,7 +81,7 @@ end
 function quantity_values(::Val{nameof(ArrayQuantity)}, dset::HDF5.Dataset)
     time = read(dset[read_attribute(dset, TIME_ATTR)])
     data = DatasetArray(dset)
-    arrays = collect(last_dim_slices(data))
+    arrays = DatasetArrayViews(data)
     return ArrayValues(time, arrays)
 end
 
@@ -92,7 +106,7 @@ end
 function quantity_values(::Val{nameof(GridQuantity)}, dset::HDF5.Dataset)
     time = read(dset[read_attribute(dset, TIME_ATTR)])
     data = DatasetArray(dset)
-    arrays = collect(last_dim_slices(data))
+    arrays = DatasetArrayViews(data)
     coords = map(from_range_tuple, read_attribute(dset, COORDS_ATTR))
     return GridValues(time, arrays, Tuple(coords))
 end
@@ -121,7 +135,7 @@ end
 function quantity_values(::Val{nameof(MultiLevelGridQuantity)}, dset::HDF5.Dataset)
     time = read(dset[read_attribute(dset, TIME_ATTR)])
     data = DatasetArray(dset)
-    arrays = collect(last_dim_slices(data))
+    arrays = DatasetArrayViews(data)
     coord_array = map(from_range_tuple, read_attribute(dset, COORDS_ATTR))
     coords = reinterpret(reshape, NTuple{ndims(data) - 2,eltype(coord_array)}, coord_array)
     return MultiLevelGridValues(time, arrays, coords)

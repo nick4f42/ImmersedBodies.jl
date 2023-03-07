@@ -111,8 +111,16 @@ end
             @test_throws AssertionError quantity_values(file["not-a-quantity"])
 
             vals = file["nested/values"]
-            v = (quantity_values(vals[k]) for k in ("a", "b", "c", "d", "e"))
-            test_values(v...)
+            a, b, c, d, e = (quantity_values(vals[k]) for k in ("a", "b", "c", "d", "e"))
+
+            # Ensure indexing a value read from file returns a value in memory
+            @test a[1] isa Int
+            @test b[1] isa Int
+            @test c[1] isa Vector{Float64}
+            @test d[1].array isa Array{Int,2}
+            @test e[1].array isa Array{Float64,3}
+
+            test_values(a, b, c, d, e)
         end
     end
 

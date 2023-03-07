@@ -6,9 +6,10 @@ const NumberOrArray = Union{Number,AbstractArray{<:Number}}
 
 (qty::ArrayQuantity)(state) = qty.f(state)
 
-struct ArrayValues{S<:AbstractVector,A<:NumberOrArray} <: AbstractVector{A}
+struct ArrayValues{S<:AbstractVector,A<:NumberOrArray,X<:AbstractVector{A}} <:
+       AbstractVector{A}
     times::S
-    values::Vector{A}
+    values::X
 end
 
 Base.size(vals::ArrayValues) = size(vals.values)
@@ -38,15 +39,16 @@ function (qty::GridQuantity)(state)
     return GridValue(array, qty.coords)
 end
 
-struct GridValues{S,N,A<:AbstractArray,V<:GridValue} <: AbstractVector{V}
+struct GridValues{S,N,A<:AbstractArray,X<:AbstractVector{A},V<:GridValue} <:
+       AbstractVector{V}
     times::S
-    values::Vector{A}
+    values::X
     coords::NTuple{N,CoordRange}
     function GridValues(
-        times::S, values::AbstractVector{A}, coords::NTuple{N}
-    ) where {S,T,N,A<:AbstractArray{T,N}}
+        times::S, values::X, coords::NTuple{N}
+    ) where {S,T,N,A<:AbstractArray{T,N},X<:AbstractVector{A}}
         V = GridValue{T,N,A}
-        return new{S,N,A,V}(times, values, coords)
+        return new{S,N,A,X,V}(times, values, coords)
     end
 end
 
@@ -76,17 +78,18 @@ function (qty::MultiLevelGridQuantity)(state)
     return MultiLevelGridValue(array, qty.coords)
 end
 
-struct MultiLevelGridValues{S,A<:AbstractArray,N,V<:MultiLevelGridValue} <:
-       AbstractVector{V}
+struct MultiLevelGridValues{
+    S,A<:AbstractArray,N,X<:AbstractVector{A},V<:MultiLevelGridValue
+} <: AbstractVector{V}
     times::S
-    values::Vector{A}
+    values::X
     coords::Vector{NTuple{N,CoordRange}}
     function MultiLevelGridValues(
-        times::S, values::AbstractVector{A}, coords::AbstractVector{<:NTuple{N}}
-    ) where {S,T,M,A<:AbstractArray{T,M},N}
+        times::S, values::X, coords::AbstractVector{<:NTuple{N}}
+    ) where {S,T,M,A<:AbstractArray{T,M},X<:AbstractVector{A},N}
         @assert M == N + 1 # one dimension for grid sublevel
         V = MultiLevelGridValue{N,T,M,A}
-        return new{S,A,N,V}(times, values, coords)
+        return new{S,A,N,X,V}(times, values, coords)
     end
 end
 
