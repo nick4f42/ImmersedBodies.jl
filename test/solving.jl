@@ -92,11 +92,9 @@ end
 
     fn = tempname()
 
-    soln = h5open(fn, "w") do file
-        save = Dict("nested" => Dict("values" => value_group))
-        out = (vals=value_group,)
-        return solve(file, prob, tspan; out=out, call=callbacks, save=save)
-    end
+    save = Dict("nested" => Dict("values" => value_group))
+    out = (vals=value_group,)
+    soln = solve(fn, prob, tspan; out=out, call=callbacks, save=save)
 
     @testset "callbacks" begin
         test_callbacks()
