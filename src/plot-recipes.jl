@@ -1,7 +1,7 @@
-module PlotsExt
+module PlotRecipes
 
 using ImmersedBodies.Quantities
-using Plots
+using RecipesBase
 
 @recipe function f(val::GridValue{<:Number,2})
     tick_direction --> :out
