@@ -14,7 +14,7 @@ using Test
     grids = MultiLevelGrid(basegrid, 5)
 
     @test gridstep(basegrid) ≈ dx
-    @test gridstep(baselevel(grids)) ≈ dx
+    @test gridstep(grids) ≈ dx
     @test gridstep(grids, 3) ≈ 4 * dx
 
     dt = 0.004

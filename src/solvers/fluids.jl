@@ -112,10 +112,11 @@ The `lev`th level of the multi-level discretization.
 sublevel(grid::MultiLevelGrid, lev::Int) = scale(grid.base, 2.0^(lev - 1))
 
 """
-    gridstep(domain::MultiUniformGrid, lev::Int)
+    gridstep(domain::MultiUniformGrid, lev=1)
 
 The grid step of the `lev`th level.
 """
+gridstep(grid::MultiLevelGrid) = gridstep(baselevel(grid))
 gridstep(grid::MultiLevelGrid, lev::Int) = gridstep(grid.base) * 2.0^(lev - 1)
 
 struct PsiOmegaGridIndexing
