@@ -36,11 +36,6 @@ struct UniformGrid <: FluidDiscretization
     end
 end
 
-"""
-    gridstep(grid::UniformGrid)
-
-The grid cell spacing.
-"""
 gridstep(grid::UniformGrid) = grid.h
 
 """

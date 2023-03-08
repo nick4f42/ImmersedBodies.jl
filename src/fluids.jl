@@ -13,6 +13,13 @@ Describes how a fluid is discretized.
 abstract type FluidDiscretization end
 
 """
+    gridstep(grid::FluidDiscretization)
+
+The minimum spacing of a discretization.
+"""
+function gridstep end
+
+"""
     AbstractFluid
 
 Describes a region of fluid to simulate.

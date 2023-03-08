@@ -4,7 +4,8 @@ using HDF5
 using FunctionWrappers: FunctionWrapper
 
 export AbstractScheme, CNAB
-export FluidConditions, FluidDiscretization, AbstractFluid, conditions, discretized
+export FluidConditions, FluidDiscretization, AbstractFluid
+export conditions, discretized, gridstep
 export AbstractState, AbstractSolver, Problem
 export timestep, timevalue, timeindex, discretized, initstate, advance!
 
@@ -21,7 +22,7 @@ export Timesteps, TimestepCondition, AllTimesteps, timestep_times, timestep_indi
 export TimestepTimes, TimestepTimeRange, TimestepIndices, TimestepIndexRange
 export Callback, ValueGroup, solve, solve!, timestep_count, quantity_values
 
-export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid, gridstep
+export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
 
 include("dynamics.jl")
 using .Dynamics
