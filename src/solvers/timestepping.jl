@@ -35,6 +35,7 @@ function (gettrial::GetTrialState)(
     nlevel = nlevels(grid)
 
     dt = timestep(scheme)
+    Re = conditions(fluid).Re
 
     nonlin = state.nonlin
     qty = quantities(state)
@@ -47,7 +48,7 @@ function (gettrial::GetTrialState)(
         if lev < nlevel
             @views get_bc!(bc, qty.Γ[:, lev + 1], fluid.gridindex)
 
-            fac = 0.25 * dt / (fluid.Re * hc^2)
+            fac = 0.25 * dt / (Re * hc^2)
             apply_bc!(rhsbc, bc, fac, fluid.gridindex)
         end
 
@@ -220,7 +221,7 @@ function advance!(state::StatePsiOmegaGridCNAB, solver::SolverPsiOmegaGridCNAB, 
     state.t = state.t0 + timestep(prob) * (index - 1) # index starts at 1
 
     # Update freestream velocity
-    qty.u .= prob.fluid.freestream(state.t)
+    qty.u .= conditions(prob.fluid).velocity(state.t)
 
     # Trial flux and circulation
     (; qs, Γs) = solver

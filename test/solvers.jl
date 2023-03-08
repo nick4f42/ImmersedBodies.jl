@@ -5,6 +5,8 @@ using ImmersedBodies.Solvers
 using Test
 
 @testset "solvers" begin
+    flow = FreestreamFlow(t -> (1.0, -0.1); Re=100.0)
+
     dx = 0.02
     xspan = (-1.0, 3.0)
     yspan = (-2.0, 2.0)
@@ -20,9 +22,6 @@ using Test
 
     @test timestep(scheme) ≈ dt
 
-    freestream(t) = (1.0, -0.1)
-    Re = 100.0
-
     function max_vel(state)
         qty = state.qty
         nq, nlev = size(qty.q)
@@ -34,12 +33,12 @@ using Test
         end
     end
 
-    @test_throws "invalid reference frame" PsiOmegaFluidGrid(
-        scheme, grids, freestream, DiscretizationFrame(); Re
-    )
+    @test_throws "invalid reference frame" begin
+        PsiOmegaFluidGrid(flow, grids; scheme, frame=DiscretizationFrame())
+    end
 
     let
-        fluid = PsiOmegaFluidGrid(scheme, grids, freestream; Re)
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
         # Body outside of innermost fluid grid
         curve = Curves.LineSegment((0.0, 1.5), (0.0, 2.1))
@@ -52,7 +51,10 @@ using Test
     end
 
     @testset "static rigid bodies" begin
-        fluid = PsiOmegaFluidGrid(scheme, grids, freestream; Re)
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme)
+
+        @test conditions(fluid) isa FreestreamFlow
+        @test discretized(fluid) isa MultiLevelGrid
 
         curve = Curves.Circle(0.5)
         body = RigidBody(fluid, curve)
@@ -74,7 +76,7 @@ using Test
             return OffsetFrameInstant(r, v, θ, Ω)
         end
 
-        fluid = PsiOmegaFluidGrid(scheme, grids, freestream, frame; Re)
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme, frame)
 
         curve = Curves.Circle(0.5)
         body = RigidBody(fluid, curve)
@@ -88,7 +90,7 @@ using Test
     end
 
     @testset "moving rigid bodies" begin
-        fluid = PsiOmegaFluidGrid(scheme, grids, freestream; Re)
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
         function offset(t)
             r = 0.1 .* (cos(t), sin(t))

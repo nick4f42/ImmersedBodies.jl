@@ -1,3 +1,15 @@
+struct FreestreamFlow <: FluidConditions
+    velocity::FunctionWrapper{SVector{2,Float64},Tuple{Float64}} # t -> [ux, uy]
+    Re::Float64
+end
+
+"""
+    FreestreamFlow(velocity; Re) :: FluidConditions
+
+A flow with velocity `velocity` and Reynold's number `Re`.
+"""
+FreestreamFlow(velocity; Re) = FreestreamFlow(velocity, Re)
+
 """
     UniformGrid((xlims, ylims), h) :: FluidDiscretization
 
@@ -130,37 +142,35 @@ struct PsiOmegaGridIndexing
 end
 
 """
-    PsiOmegaFluidGrid(scheme, grid, freestream, frame=GlobalFrame(); Re) :: AbstractFluid
+    PsiOmegaFluidGrid(flow::FreestreamFlow, grid; [scheme], [frame]) :: AbstractFluid
 
 Fluid simulated with the streamfunction-vorticity formulation.
 
 # Arguments
+- `flow::FreestreamFlow`: The prescribed flow conditions.
+- `grid::MultiLevelGrid`: The fluid domain and discretization.
 - `scheme::AbstractScheme`: The timestepping scheme to use.
-- `grid::MultiLevelGrid`: The fluid domain to simulate.
-- `freestream`: The freestream velocity `t -> [ux, uy]` in the lab frame.
 - `frame::AbstractFrame`: The reference frame that grid coordinates are resolved in.
-- `Re::Float64`: The Reynold's number of the flow.
 """
 struct PsiOmegaFluidGrid{S<:AbstractScheme,F<:AbstractFrame} <: AbstractFluid
-    scheme::S
+    flow::FreestreamFlow
     grid::MultiLevelGrid
-    freestream::FunctionWrapper{SVector{2,Float64},Tuple{Float64}} # t -> [ux, uy]
+    scheme::S
     frame::F
-    Re::Float64
     gridindex::PsiOmegaGridIndexing
     function PsiOmegaFluidGrid(
-        scheme::S, grid::MultiLevelGrid, freestream, frame::F=GlobalFrame(); Re
+        flow::FreestreamFlow, grid::MultiLevelGrid; scheme::S, frame::F=GlobalFrame()
     ) where {S,F}
         if frame isa DiscretizationFrame
             throw(ArgumentError("invalid reference frame given (circular definition)"))
         end
-        gridindex = PsiOmegaGridIndexing(grid.base)
-        return new{S,F}(scheme, grid, freestream, frame, Re, gridindex)
+        gridindex = PsiOmegaGridIndexing(baselevel(grid))
+        return new{S,F}(flow, grid, scheme, frame, gridindex)
     end
 end
 
+conditions(fluid::PsiOmegaFluidGrid) = fluid.flow
 discretized(fluid::PsiOmegaFluidGrid) = fluid.grid
-
 timestep_scheme(fluid::PsiOmegaFluidGrid) = fluid.scheme
 
 # The x and y coordinates of the gridpoints where x-flux is stored.

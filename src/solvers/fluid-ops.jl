@@ -514,7 +514,7 @@ function A_Ainv_linearmaps(
 
     hc = gridstep(grid, lev)
     dt = timestep(prob)
-    Re = prob.fluid.Re
+    Re = conditions(prob.fluid).Re
 
     Λ = lap_inv.Λ
     dst_plan = lap_inv.dst_plan

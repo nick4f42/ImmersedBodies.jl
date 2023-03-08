@@ -6,16 +6,15 @@ using Test
 using HDF5
 
 function placeholder_problem()
+    flow = FreestreamFlow(t -> (1.0, 0.0); Re=50.0)
+
     dx = 0.05
     xspan = (-1.0, 1.0)
     yspan = (-1.0, 1.0)
     basegrid = UniformGrid(dx, xspan, yspan)
     grids = MultiLevelGrid(basegrid, 2)
 
-    dt = 0.005
-    scheme = CNAB(dt)
-    freestream(_) = (1.0, 0.0)
-    fluid = PsiOmegaFluidGrid(scheme, grids, freestream; Re=100.0)
+    fluid = PsiOmegaFluidGrid(flow, grids; scheme=CNAB(0.005))
 
     curve = Curves.Circle(0.3)
     body = RigidBody(fluid, curve)

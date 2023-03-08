@@ -3,8 +3,8 @@ module Solvers
 using ...ImmersedBodies
 using ...ImmersedBodies.Bodies
 using ...ImmersedBodies.Quantities
-import ...ImmersedBodies:
-    timestep_scheme, advance!, solve!, statetype, solvertype, timevalue, timeindex
+import ...ImmersedBodies: advance!, solve!, statetype, solvertype
+import ...ImmersedBodies: timevalue, timeindex, timestep_scheme, conditions, discretized
 import ...ImmersedBodies.Bodies: body_segment_length, bodypanels, prescribe_motion!
 
 using EllipsisNotation
@@ -15,7 +15,8 @@ using LinearMaps
 using StaticArrays
 using FunctionWrappers: FunctionWrapper
 
-export PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid, gridstep, sublevel, baselevel
+export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
+export gridstep, sublevel, baselevel
 
 include("fluids.jl")
 
