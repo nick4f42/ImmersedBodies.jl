@@ -3,7 +3,8 @@ module ImmersedBodies
 using HDF5
 using FunctionWrappers: FunctionWrapper
 
-export AbstractScheme, CNAB
+export AbstractScheme, CNAB, default_scheme
+
 export FluidConditions, FluidDiscretization, AbstractFluid
 export conditions, discretized, gridstep, default_gridstep
 export AbstractState, AbstractSolver, Problem

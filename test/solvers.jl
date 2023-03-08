@@ -22,6 +22,11 @@ using Test
 
     @test timestep(scheme) ≈ dt
 
+    let Umax = 1.5, scheme = default_scheme(grids; Umax, cfl=0.1)
+        cfl = Umax * timestep(scheme) / gridstep(grids)
+        @test cfl < 0.2
+    end
+
     function max_vel(state)
         qty = state.qty
         nq, nlev = size(qty.q)

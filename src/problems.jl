@@ -33,6 +33,26 @@ end
 timestep(scheme::CNAB) = scheme.dt
 
 """
+    default_scheme([T,] grid; Umax, [cfl], [safety])
+
+A default [`AbstractScheme`](@ref) to hit a target `cfl` number.
+
+# Arguments
+- `T::Type{<:AbstractScheme}`: The type of scheme to return.
+- `grid::FluidDiscretization`: The discretization of the fluid.
+- `Umax`: The maximum fluid velocity relative to the discretization.
+- `cfl`: Target CFL number.
+- `safety`: Safety factor on `Umax`.
+"""
+default_scheme(grid; kw...) = default_scheme(CNAB, grid; kw...)
+
+function default_scheme(::Type{CNAB}, grid::FluidDiscretization; Umax, cfl=0.1, safety=5.0)
+    dx = gridstep(grid)
+    dt = round(cfl * dx / (safety * Umax); sigdigits=1)
+    return CNAB(dt)
+end
+
+"""
     AbstractState
 
 The state of fluid and bodies at a point in time.
