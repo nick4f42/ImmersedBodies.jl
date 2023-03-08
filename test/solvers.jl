@@ -8,7 +8,7 @@ using Test
     flow = FreestreamFlow(t -> (1.0, -0.1); Re=100.0)
 
     dx = 0.02
-    xspan = (-1.0, 3.0)
+    xspan = (-1, 3)
     yspan = (-2.0, 2.0)
     basegrid = UniformGrid(dx, xspan, yspan)
     grids = MultiLevelGrid(basegrid, 5)

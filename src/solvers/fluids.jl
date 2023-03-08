@@ -24,7 +24,7 @@ struct UniformGrid <: FluidDiscretization
     h::Float64 # Grid cell size
     xs::LinRange{Float64,Int} # x coordinates
     ys::LinRange{Float64,Int} # y coordinates
-    function UniformGrid(h::Float64, span::Vararg{NTuple{2,AbstractFloat},2})
+    function UniformGrid(h::Float64, span::Vararg{NTuple{2,Number},2})
         xs, ys = (x0:h:x1 for (x0, x1) in span)
         return new(h, xs, ys)
     end
