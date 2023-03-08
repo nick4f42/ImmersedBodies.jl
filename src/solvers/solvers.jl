@@ -4,8 +4,8 @@ using ...ImmersedBodies
 using ...ImmersedBodies.Bodies
 using ...ImmersedBodies.Quantities
 import ...ImmersedBodies: advance!, solve!, statetype, solvertype
-import ...ImmersedBodies:
-    timevalue, timeindex, timestep_scheme, conditions, discretized, gridstep
+import ...ImmersedBodies: gridstep, default_gridstep
+import ...ImmersedBodies: timevalue, timeindex, timestep_scheme, conditions, discretized
 import ...ImmersedBodies.Bodies: body_segment_length, bodypanels, prescribe_motion!
 
 using EllipsisNotation
@@ -17,7 +17,7 @@ using StaticArrays
 using FunctionWrappers: FunctionWrapper
 
 export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
-export gridstep, sublevel, baselevel
+export sublevel, baselevel
 
 include("fluids.jl")
 

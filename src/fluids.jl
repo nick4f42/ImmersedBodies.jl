@@ -20,6 +20,13 @@ The minimum spacing of a discretization.
 function gridstep end
 
 """
+    default_gridstep(flow::FluidConditions)
+
+A good gridstep to use for the given `flow`.
+"""
+function default_gridstep end
+
+"""
     AbstractFluid
 
 Describes a region of fluid to simulate.

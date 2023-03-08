@@ -33,6 +33,13 @@ using Test
         end
     end
 
+    let flow = FreestreamFlow(t -> (t, t); Re=200.0)
+        @test default_gridstep(flow) ≈ 0.01 # Grid Re of 2
+
+        grid = UniformGrid(flow, (0.0, 1.0), (-2.0, 2.0))
+        @test gridstep(grid) ≈ 0.01 # Floored to 1 significant digit
+    end
+
     @test_throws "invalid reference frame" begin
         PsiOmegaFluidGrid(flow, grids; scheme, frame=DiscretizationFrame())
     end

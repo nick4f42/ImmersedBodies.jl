@@ -5,7 +5,7 @@ using FunctionWrappers: FunctionWrapper
 
 export AbstractScheme, CNAB
 export FluidConditions, FluidDiscretization, AbstractFluid
-export conditions, discretized, gridstep
+export conditions, discretized, gridstep, default_gridstep
 export AbstractState, AbstractSolver, Problem
 export timestep, timevalue, timeindex, discretized, initstate, advance!
 

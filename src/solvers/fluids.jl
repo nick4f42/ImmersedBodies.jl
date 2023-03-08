@@ -11,21 +11,21 @@ A flow with velocity `velocity` and Reynold's number `Re`.
 FreestreamFlow(velocity; Re) = FreestreamFlow(velocity, Re)
 
 """
-    UniformGrid((xlims, ylims), h) :: FluidDiscretization
+    UniformGrid(h, xspan, yspan) :: FluidDiscretization
 
 A uniform grid with spacing `h` on the specified x and y limits.
 
 # Arguments
-- `xlims = (xmin, xmax)`: Extents of the grid along the x axis.
-- `ylims = (ymin, ymax)`: Extents of the grid along the x axis.
 - `h`: The grid step.
+- `xspan = (xmin, xmax)`: Extents of the grid along the x axis.
+- `yspan = (ymin, ymax)`: Extents of the grid along the x axis.
 """
 struct UniformGrid <: FluidDiscretization
     h::Float64 # Grid cell size
     xs::LinRange{Float64,Int} # x coordinates
     ys::LinRange{Float64,Int} # y coordinates
-    function UniformGrid(h::Float64, lims::Vararg{NTuple{2,AbstractFloat},2})
-        xs, ys = (x0:h:x1 for (x0, x1) in lims)
+    function UniformGrid(h::Float64, span::Vararg{NTuple{2,AbstractFloat},2})
+        xs, ys = (x0:h:x1 for (x0, x1) in span)
         return new(h, xs, ys)
     end
     function UniformGrid(
@@ -34,6 +34,19 @@ struct UniformGrid <: FluidDiscretization
         xs, ys = (x0 .+ LinRange(0, h * (n - 1), n) for (x0, n) in zip(corner, counts))
         return new(h, xs, ys)
     end
+end
+
+# Default to grid Re of 2
+default_gridstep(flow::FreestreamFlow) = 2 / flow.Re
+
+"""
+    UniformGrid(flow::FreestreamFlow, xspan, yspan) :: FluidDiscretization
+
+A uniform grid with a default gridstep based on `flow`.
+"""
+function UniformGrid(flow::FreestreamFlow, span...)
+    h = floor(default_gridstep(flow); sigdigits=1)
+    return UniformGrid(h, span...)
 end
 
 gridstep(grid::UniformGrid) = grid.h
