@@ -178,6 +178,18 @@ struct PsiOmegaFluidGrid{S<:AbstractScheme,F<:AbstractFrame} <: AbstractFluid
     end
 end
 
+const DEFAULT_LEVEL_COUNT = 5
+
+"""
+    PsiOmegaFluidGrid(flow::FreestreamFlow, grid::UniformGrid; kw...) :: AbstractFluid
+
+Create a fluid grid from a base `grid` and $DEFAULT_LEVEL_COUNT levels.
+"""
+function PsiOmegaFluidGrid(flow::FreestreamFlow, grid::UniformGrid; kw...)
+    grids = MultiLevelGrid(grid, DEFAULT_LEVEL_COUNT)
+    return PsiOmegaFluidGrid(flow, grids; kw...)
+end
+
 conditions(fluid::PsiOmegaFluidGrid) = fluid.flow
 discretized(fluid::PsiOmegaFluidGrid) = fluid.grid
 timestep_scheme(fluid::PsiOmegaFluidGrid) = fluid.scheme

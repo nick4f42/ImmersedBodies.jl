@@ -50,6 +50,11 @@ using Test
     end
 
     let
+        fluid = PsiOmegaFluidGrid(flow, basegrid; scheme)
+        @test nlevels(discretized(fluid)) == Solvers.DEFAULT_LEVEL_COUNT
+    end
+
+    let
         fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
         # Body outside of innermost fluid grid
