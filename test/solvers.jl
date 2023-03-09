@@ -2,6 +2,7 @@ module TestSolvers
 
 using ImmersedBodies
 using ImmersedBodies.Solvers
+using ImmersedBodies.Solvers: StaticBodyProblem
 using Test
 
 @testset "solvers" begin
@@ -83,6 +84,8 @@ using Test
         bodies = BodyGroup([body])
 
         prob = Problem(fluid, bodies)
+        @test prob isa StaticBodyProblem
+
         state = initstate(prob)
 
         solve!(state, prob, 10 * dt)
@@ -105,6 +108,8 @@ using Test
         bodies = BodyGroup([body])
 
         prob = Problem(fluid, bodies)
+        @test prob isa StaticBodyProblem
+
         state = initstate(prob)
 
         solve!(state, prob, 10 * dt)
@@ -134,6 +139,8 @@ using Test
         bodies = BodyGroup([body1, body2])
 
         prob = Problem(fluid, bodies)
+        @test !(prob isa StaticBodyProblem)
+
         state = initstate(prob)
 
         solve!(state, prob, 10 * dt)
