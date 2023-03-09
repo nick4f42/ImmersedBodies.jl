@@ -4,11 +4,11 @@ struct FreestreamFlow <: FluidConditions
 end
 
 """
-    FreestreamFlow(velocity; Re) :: FluidConditions
+    FreestreamFlow([velocity]; Re) :: FluidConditions
 
-A flow with velocity `velocity` and Reynold's number `Re`.
+A flow with velocity `velocity(t) = (ux, uy)` (defaults to zero) and Reynold's number `Re`.
 """
-FreestreamFlow(velocity; Re) = FreestreamFlow(velocity, Re)
+FreestreamFlow(velocity=t -> (0.0, 0.0); Re) = FreestreamFlow(velocity, Re)
 
 """
     UniformGrid(h, xspan, yspan) :: FluidDiscretization

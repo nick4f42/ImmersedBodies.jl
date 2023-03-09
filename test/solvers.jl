@@ -5,6 +5,11 @@ using ImmersedBodies.Solvers
 using Test
 
 @testset "solvers" begin
+    let flow = FreestreamFlow(; Re=123.4)
+        @test flow.velocity(0.3) == [0.0, 0.0]
+        @test flow.Re == 123.4
+    end
+
     flow = FreestreamFlow(t -> (1.0, -0.1); Re=100.0)
 
     dx = 0.02
