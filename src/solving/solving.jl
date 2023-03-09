@@ -352,7 +352,7 @@ function push_callbacks!(
 end
 
 """
-    solve(problem::Problem, (t0, tf); out=(), call=())
+    solve(problem::Problem, (t0, tf); out=(), call=(), showprogress=false)
 
 Solve the problem between times `t0` and `tf`.  If given, call each [`Callback`](@ref) in
 `call` during the simulation. Return the final state.
@@ -362,6 +362,7 @@ Solve the problem between times `t0` and `tf`.  If given, call each [`Callback`]
 - `(t0, tf)`: Start and end of the time span to solve for.
 - `out=()`: A collection of [`ValueGroup`](@ref) to save from the simulation.
 - `call=()`: A collection of [`Callback`](@ref) to call during the simulation.
+- `showprogress=false`: Whether to show a progress bar during the simulation.
 
 # Returns
 The result of each [`ValueGroup`](@ref) in `out`, mapped with `map`.
@@ -398,10 +399,18 @@ end
 
 Solve a problem up to time `tf` like [`solve`](@ref) but using `state` as an initial state.
 """
-function solve!(state::AbstractState, problem::Problem, tf::Float64; out=(), call=())
+function solve!(
+    state::AbstractState, problem::Problem, tf::Float64; out=(), call=(), showprogress=false
+)
     tspan = (timevalue(state), tf)
 
     callbacks = Callback[]
+    if showprogress
+        prog = Progress(timestep_count(problem, tspan); desc="solving")
+        printer = Callback(_ -> next!(prog), AllTimesteps())
+        push!(callbacks, printer)
+    end
+
     output_savers = quantity_mem_savers!(callbacks, out) # callbacks for saving output data
     append!(callbacks, call)
 

@@ -93,7 +93,10 @@ end
 
     save = Dict("nested" => Dict("values" => value_group))
     out = (vals=value_group,)
-    soln = solve(fn, prob, tspan; out=out, call=callbacks, save=save)
+
+    soln = redirect_stderr(devnull) do # Prevent progress bar output
+        solve(fn, prob, tspan; out=out, call=callbacks, save=save, showprogress=true)
+    end
 
     @testset "callbacks" begin
         test_callbacks()
