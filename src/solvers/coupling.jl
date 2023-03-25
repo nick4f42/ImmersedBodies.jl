@@ -187,6 +187,61 @@ function δh(rf, rb, dr)
     end
 end
 
+struct RedistributionWeights{ME}
+    E::ME
+    weights::Vector{Float64}
+    qtmp::Vector{Float64}
+    function RedistributionWeights(E, weights, qtmp)
+        redist = new{typeof(E)}(E, weights, qtmp)
+        update!(redist)
+        return redist
+    end
+end
+
+function RedistributionWeights(; E, qtmp)
+    weights = similar(qtmp)
+    return RedistributionWeights(E, weights, qtmp)
+end
+
+function W_linearmap(redist::RedistributionWeights)
+    n = size(redist.E, 1)
+    return LinearMap(redist, n)
+end
+
+function update!(redist::RedistributionWeights)
+    (; weights, E) = redist
+
+    nf = size(E, 1)
+    mul!(weights, E', ones(nf))
+    for (i, w) in pairs(weights)
+        weights[i] = w < 1e-10 ? 0.0 : 1.0 / w
+    end
+
+    return nothing
+end
+
+function (redist::RedistributionWeights)(qout, qin)
+    (; weights, qtmp, E) = redist
+
+    mul!(qtmp, E', qin)
+    qtmp .*= weights
+    mul!(qout, E, qtmp)
+
+    return nothing
+end
+
+function Itilde_linearmap(nb_deform::Int)
+    function structure_to_fluid(F_sm, F_bg)
+        return F_sm .= vec(transpose(reshape(F_bg, 2, nb_deform)))
+    end
+
+    function fluid_to_structure(F_bg, F_sm)
+        return F_bg .= vec(transpose(reshape(F_sm, nb_deform, 2)))
+    end
+
+    return LinearMap(structure_to_fluid, fluid_to_structure, 2 * nb_deform)
+end
+
 abstract type SurfaceCoupler end
 
 # Solve the Poisson equation (25) in Colonius & Taira (2008).
@@ -222,6 +277,134 @@ function (coupler::RigidSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     @. Ftmp -= ub * h # Enforce no-slip conditions
 
     mul!(F̃b, Binv, Ftmp)
+
+    return nothing
+end
+
+struct EulerBernoulliSurfaceCoupler{P<:Problem,R<:RedistributionWeights,ME,MB,MW,MI} <:
+       SurfaceCoupler
+    prob::P
+    qtot::Vector{Float64}
+    mats::StructuralMatrices
+    reg::Reg
+    redist::R
+    E::ME
+    B::MB
+    W::MW
+    Itilde::MI
+    χ_k::Vector{Float64}
+    ζ_k::Vector{Float64}
+    ζdot_k::Vector{Float64}
+    function EulerBernoulliSurfaceCoupler(;
+        prob::P, qtot, mats, reg, redist::R, E::ME, B::MB, Itilde::MI, χ_k, ζ_k, ζdot_k
+    ) where {P,R,ME,MB,MI}
+        W = W_linearmap(redist)
+        return new{P,R,ME,MB,typeof(W),MI}(
+            prob, qtot, mats, reg, redist, E, B, W, Itilde, χ_k, ζ_k, ζdot_k
+        )
+    end
+end
+
+function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
+    (; F̃b, q0, panels, eb_state) = quantities(state)
+    (; prob, qtot, mats, reg, redist, E, B, W, Itilde) = coupler
+    (; M, K, Q) = mats
+    dt = timestep(prob)
+    h = (gridstep ∘ baselevel ∘ discretized)(prob.fluid)
+
+    # Total flux; doesn't change over an FSI loop
+    @views @. qtot = qs[:, 1] + q0[:, 1]
+
+    # TODO: Add external option for tolerance
+    tol_fsi = 1.e-5
+
+    # Only one deforming body is currently supported
+    deform = only(eb_state.perbody)
+    χ = vec(deform.χ)
+    ζ = vec(deform.ζ)
+    ζdot = vec(deform.ζdot)
+
+    (; χ_k, ζ_k, ζdot_k) = coupler
+    copy!(χ_k, χ)
+    copy!(ζ_k, ζ)
+    copy!(ζdot_k, ζdot)
+
+    i_body = 1
+    body = only(prob.bodies)
+    bodypanels = panels.perbody[i_body]
+
+    err_fsi = Inf
+    while err_fsi > tol_fsi
+        update!(mats, body, bodypanels)
+
+        Khat = K + (4 / dt^2) * M
+        Khat_inv = inv(Khat)
+        Q_W = Q * Itilde' * W * 0.5 / dt # This is QWx in Fortran code
+        Q_Itilde_W = Itilde * Khat_inv * Q * Itilde' * W * h / dt^2
+
+        update!(reg, bodypanels, i_body) # only 1 body, so index is 1
+        update!(redist)
+
+        Binv = Binv_linearmap(prob, B, Q_Itilde_W)
+
+        # Develop RHS for linearized system for stresses
+        F̃_kp1 = similar(F̃b)
+        mul!(F̃_kp1, E, qtot)  # E*(qs + q0)... using fb here as working array
+
+        r_c = 2 / dt * (χ_k - χ) - ζ
+        r_ζ = M * (ζdot + 4 / dt * ζ + 4 / dt^2 * (χ - χ_k)) - K * χ_k
+
+        r_ζ = Khat_inv * r_ζ
+        F_bg = -h * (2 / dt * r_ζ + r_c)
+        F_sm = similar(F_bg)
+        mul!(F_sm, Itilde, F_bg)
+        rhsf = F_sm + F̃_kp1
+
+        mul!(F̃b, Binv, rhsf) # Solve for the stresses
+
+        f_kp1 = similar(F̃b) # Redistribute
+        mul!(f_kp1, W, F̃b)
+
+        Δχ1 = similar(r_ζ)
+        mul!(Δχ1, Khat_inv * Q_W, F̃b)
+        Δχ = r_ζ + Δχ1
+
+        max_χ = maximum(abs, χ_k)
+        max_Δχ = maximum(abs, Δχ)
+        err_fsi = max_χ > 1e-13 ? max_Δχ / max_χ : max_Δχ
+
+        # Update all structural quantities
+        χ_k = χ_k + Δχ
+        ζ_k = -ζ + 2 / dt * (χ_k - χ)
+        ζdot_k = 4 / dt^2 * (χ_k - χ) - 4 / dt * ζ - ζdot
+
+        # TODO: Make a loop for each deforming body
+
+        mul!(vec(bodypanels.pos), Itilde, χ_k)
+        bodypanels.pos .+= body.xref
+
+        # Recalculate segment lengths based on positions
+        recalculate_lengths!(bodypanels)
+
+        mul!(vec(bodypanels.vel), Itilde, ζ_k)
+    end
+
+    copy!(χ, χ_k)
+    copy!(ζ, ζ_k)
+    copy!(ζdot, ζdot_k)
+
+    return nothing
+end
+
+function recalculate_lengths!(panels::PanelView)
+    # TODO: This ignores the last panel length like how the Fortran version does
+    # Is there a better way to do this?
+
+    for i in 1:(npanels(panels) - 1)
+        dx = panels.pos[i + 1, 1] - panels.pos[i, 1]
+        dy = panels.pos[i + 1, 2] - panels.pos[i, 2]
+        panels.len[i] = hypot(dx, dy)
+    end
 
     return nothing
 end

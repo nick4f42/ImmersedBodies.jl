@@ -182,8 +182,27 @@ function SolverPsiOmegaGridCNAB(
         prob, nonlinear, vort2flux, As, Ainvs, rhsbc=Γtmp2, rhs=Γtmp3, bc=Γbc
     )
 
-    Binv = Binv_linearmap(prob, B)
-    couple_surface = RigidSurfaceCoupler(; basegrid=basegrid, Binv, E, Ftmp=Ftmp, Q=qtmp1)
+    couple_surface = if prob.bodies isa BodyGroup{<:RigidBody}
+        Binv = Binv_linearmap(prob, B)
+        RigidSurfaceCoupler(; basegrid=basegrid, Binv, E, Ftmp=Ftmp, Q=qtmp1)
+    else
+        nb = npanels(prob.bodies)
+
+        deform_body = only(prob.bodies)
+        mats = StructuralMatrices(deform_body)
+        Itilde = Itilde_linearmap(nb)
+        redist = RedistributionWeights(; E, qtmp=zeros(nq))
+
+        nb_deform = nb
+        nf_deform = 2 * nb_deform
+        χ_k = zeros(nf_deform)
+        ζ_k = zeros(nf_deform)
+        ζdot_k = zeros(nf_deform)
+
+        EulerBernoulliSurfaceCoupler(;
+            prob, qtot=qtmp1, mats, reg, redist, E, B, Itilde, χ_k, ζ_k, ζdot_k
+        )
+    end
 
     project_circ = CircProjecter(; Ainv=Ainvs[1], C, E, Γtmp=Γtmp2, qtmp=qtmp1)
 

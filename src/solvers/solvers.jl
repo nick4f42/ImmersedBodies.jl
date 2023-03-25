@@ -32,6 +32,7 @@ const StaticBodyProblem{S} = Union{
 
 include("states.jl")
 include("fluid-ops.jl")
+include("structure-ops.jl")
 include("coupling.jl")
 include("timestepping.jl")
 
