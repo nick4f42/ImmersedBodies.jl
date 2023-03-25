@@ -190,6 +190,22 @@ end
 
 npanels(body::EulerBernoulliBeamBody) = length(body.ds0)
 
+function _show(io::IO, body::EulerBernoulliBeamBody, prefix)
+    print(io, prefix, "EulerBernoulliBeamBody:")
+    if get(io, :compact, false)
+        print(io, " with bcs ", body.bcs)
+    else
+        ioc = IOContext(io, :limit => true, :compact => true)
+
+        print(ioc, '\n', prefix, "  reference points = ")
+        summary(ioc, body.xref)
+
+        print(ioc, '\n', prefix, "    boundary conds = ", body.bcs)
+    end
+
+    return nothing
+end
+
 """
     EBBeamStateView
 

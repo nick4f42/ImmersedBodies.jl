@@ -37,7 +37,10 @@ segments = partition(curve, fluid)
 @testshow body1 = RigidBody(segments)
 @testshow body2 = RigidBody(segments, frame)
 
-@testshow bodies = BodyGroup([body1, body2])
+bcs = map(ClampParameterBC, [0.0, 1.0])
+@testshow body3 = EulerBernoulliBeamBody(fluid, curve, bcs; m=1.0, kb=1.0, ke=1.0)
+
+@testshow bodies = BodyGroup([body1, body2, body3])
 
 @testshow prob = Problem(fluid, bodies)
 
