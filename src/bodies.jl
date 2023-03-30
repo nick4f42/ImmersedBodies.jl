@@ -267,6 +267,12 @@ function EBBeamState(bodies::Vector{<:EulerBernoulliBeamBody})
     return EBBeamState(χ, ζ, ζdot, perbody)
 end
 
+struct DeformingBodyIndex
+    i_body::Int
+    i_panel::Int
+    i_deform_panel::Int
+end
+
 """
     BodyGroup(bodies::Vector{<:AbstractBody})
 
@@ -275,9 +281,25 @@ A collection of bodies.
 struct BodyGroup{B<:AbstractBody} <: AbstractVector{B}
     bodies::Vector{B} # all bodies
     npanel::Int
+    npanel_deform::Int
+    deforming::Vector{DeformingBodyIndex}
     function BodyGroup(bodies::Vector{B}) where {B<:AbstractBody}
-        npanel = sum(npanels, bodies)
-        return new{B}(bodies, npanel)
+        deforming = DeformingBodyIndex[]
+
+        n_panel = 0
+        n_panel_deform = 0
+        for (i_body, body) in enumerate(bodies)
+            n = npanels(body)
+
+            if body isa EulerBernoulliBeamBody
+                push!(deforming, DeformingBodyIndex(i_body, n_panel, n_panel_deform))
+                n_panel_deform += n
+            end
+
+            n_panel += n
+        end
+
+        return new{B}(bodies, n_panel, n_panel_deform, deforming)
     end
 end
 
@@ -308,6 +330,7 @@ end
 View into sequences of panels in [`Panels`](@ref).
 """
 struct PanelView
+    i_panel::Int
     pos::MatrixRowView{Float64}
     vel::MatrixRowView{Float64}
     len::VectorView{Float64}
@@ -344,7 +367,7 @@ function Panels(bodies::BodyGroup)
     for (i, body) in enumerate(bodies)
         n_panel = npanels(body)
         r = i_panel .+ (1:n_panel)
-        perbody[i] = @views PanelView(pos[r, :], vel[r, :], len[r], traction[r, :])
+        perbody[i] = @views PanelView(i_panel, pos[r, :], vel[r, :], len[r], traction[r, :])
         i_panel += n_panel
     end
 

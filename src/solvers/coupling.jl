@@ -242,6 +242,54 @@ function Itilde_linearmap(nb_deform::Int)
     return LinearMap(structure_to_fluid, fluid_to_structure, 2 * nb_deform)
 end
 
+function deforming_coord_unfilter(bodies::BodyGroup)
+    nb_all = npanels(bodies)
+    nb_deform = bodies.npanel_deform
+
+    # z_all and z_deform are flattened [xs ys] matrices
+    function deform_to_all(z_all, z_deform)
+        z_all .= 0
+
+        for index in bodies.deforming
+            n = npanels(bodies[index.i_body])
+            for j in 1:n
+                i_deform = index.i_deform_panel + j
+                i_all = index.i_panel + j
+
+                z_all[i_all] = z_deform[i_deform]
+                z_all[nb_all + i_all] = z_deform[nb_deform + i_deform]
+            end
+        end
+
+        return z_all
+    end
+
+    return LinearMap(deform_to_all, 2 * nb_all, 2 * nb_deform)
+end
+
+function deforming_coord_filter(bodies::BodyGroup)
+    nb_all = npanels(bodies)
+    nb_deform = bodies.npanel_deform
+
+    # z_all and z_deform are flattened [xs ys] matrices
+    function all_to_deform(z_deform, z_all)
+        for index in bodies.deforming
+            n = npanels(bodies[index.i_body])
+            for j in 1:n
+                i_deform = index.i_deform_panel + j
+                i_all = index.i_panel + j
+
+                z_deform[i_deform] = z_all[i_all]
+                z_deform[nb_deform + i_deform] = z_all[nb_all + i_all]
+            end
+        end
+
+        return z_deform
+    end
+
+    return LinearMap(all_to_deform, 2 * nb_deform, 2 * nb_all)
+end
+
 abstract type SurfaceCoupler end
 
 # Solve the Poisson equation (25) in Colonius & Taira (2008).
@@ -281,8 +329,9 @@ function (coupler::RigidSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     return nothing
 end
 
-struct EulerBernoulliSurfaceCoupler{P<:Problem,R<:RedistributionWeights,ME,MB,MW,MI} <:
-       SurfaceCoupler
+struct EulerBernoulliSurfaceCoupler{
+    P<:Problem,R<:RedistributionWeights,ME,MB,MW,MI,MF,MU
+} <: SurfaceCoupler
     prob::P
     qtot::Vector{Float64}
     mats::StructuralMatrices
@@ -292,22 +341,41 @@ struct EulerBernoulliSurfaceCoupler{P<:Problem,R<:RedistributionWeights,ME,MB,MW
     B::MB
     W::MW
     Itilde::MI
+    filter_deform::MF
+    unfilter_deform::MU
     χ_k::Vector{Float64}
     ζ_k::Vector{Float64}
     ζdot_k::Vector{Float64}
-    function EulerBernoulliSurfaceCoupler(;
-        prob::P, qtot, mats, reg, redist::R, E::ME, B::MB, Itilde::MI, χ_k, ζ_k, ζdot_k
-    ) where {P,R,ME,MB,MI}
-        W = W_linearmap(redist)
-        return new{P,R,ME,MB,typeof(W),MI}(
-            prob, qtot, mats, reg, redist, E, B, W, Itilde, χ_k, ζ_k, ζdot_k
-        )
-    end
+end
+
+function EulerBernoulliSurfaceCoupler(;
+    prob, qtot, mats, reg, redist, E, B, Itilde, χ_k, ζ_k, ζdot_k
+)
+    W = W_linearmap(redist)
+    filter_deform = deforming_coord_filter(prob.bodies)
+    unfilter_deform = deforming_coord_unfilter(prob.bodies)
+    return EulerBernoulliSurfaceCoupler(
+        prob,
+        qtot,
+        mats,
+        reg,
+        redist,
+        E,
+        B,
+        W,
+        Itilde,
+        filter_deform,
+        unfilter_deform,
+        χ_k,
+        ζ_k,
+        ζdot_k,
+    )
 end
 
 function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     (; F̃b, q0, panels, eb_state) = quantities(state)
-    (; prob, qtot, mats, reg, redist, E, B, W, Itilde) = coupler
+    (; prob, qtot, mats, reg, redist, E, B, W, Itilde, filter_deform, unfilter_deform) =
+        coupler
     (; M, K, Q) = mats
     dt = timestep(prob)
     h = (gridstep ∘ baselevel ∘ discretized)(prob.fluid)
@@ -329,8 +397,8 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
     copy!(ζ_k, ζ)
     copy!(ζdot_k, ζdot)
 
-    i_body = 1
-    body = only(prob.bodies)
+    (; i_body) = only(prob.bodies.deforming)
+    body = prob.bodies[i_body]
     bodypanels = panels.perbody[i_body]
 
     err_fsi = Inf
@@ -339,8 +407,9 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
 
         Khat = K + (4 / dt^2) * M
         Khat_inv = inv(Khat)
-        Q_W = Q * Itilde' * W * 0.5 / dt # This is QWx in Fortran code
-        Q_Itilde_W = Itilde * Khat_inv * Q * Itilde' * W * h / dt^2
+        Q_W = Q * Itilde' * filter_deform * W * 0.5 / dt # This is QWx in Fortran code
+        Q_Itilde_W =
+            unfilter_deform * Itilde * Khat_inv * Q * Itilde' * filter_deform * W * h / dt^2
 
         update!(reg, bodypanels, i_body) # only 1 body, so index is 1
         update!(redist)
@@ -351,13 +420,22 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
         F̃_kp1 = similar(F̃b)
         mul!(F̃_kp1, E, qtot)  # E*(qs + q0)... using fb here as working array
 
+        # Enforce no-slip conditions for rigid bodies
+        F̃_kp1_mat = reshape(F̃_kp1, :, 2)
+        for (i, body) in enumerate(prob.bodies)
+            if body isa RigidBody
+                p = panels.perbody[i]
+                n = size(p.vel, 1)
+                @views @. F̃_kp1_mat[p.i_panel .+ (1:n), :] -= h * p.vel
+            end
+        end
+
         r_c = 2 / dt * (χ_k - χ) - ζ
         r_ζ = M * (ζdot + 4 / dt * ζ + 4 / dt^2 * (χ - χ_k)) - K * χ_k
 
         r_ζ = Khat_inv * r_ζ
         F_bg = -h * (2 / dt * r_ζ + r_c)
-        F_sm = similar(F_bg)
-        mul!(F_sm, Itilde, F_bg)
+        F_sm = (unfilter_deform * Itilde) * F_bg
         rhsf = F_sm + F̃_kp1
 
         mul!(F̃b, Binv, rhsf) # Solve for the stresses

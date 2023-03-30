@@ -187,13 +187,13 @@ function SolverPsiOmegaGridCNAB(
         RigidSurfaceCoupler(; basegrid=basegrid, Binv, E, Ftmp=Ftmp, Q=qtmp1)
     else
         nb = npanels(prob.bodies)
+        nb_deform = size(state.qty.eb_state.χ, 1)
 
-        deform_body = only(prob.bodies)
+        deform_body = prob.bodies[only(prob.bodies.deforming).i_body]
         mats = StructuralMatrices(deform_body)
-        Itilde = Itilde_linearmap(nb)
+        Itilde = Itilde_linearmap(nb_deform)
         redist = RedistributionWeights(; E, qtmp=zeros(nq))
 
-        nb_deform = nb
         nf_deform = 2 * nb_deform
         χ_k = zeros(nf_deform)
         ζ_k = zeros(nf_deform)

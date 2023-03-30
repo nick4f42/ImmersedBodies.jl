@@ -34,7 +34,7 @@ function PsiOmegaGridQuantities(prob::Problem{<:PsiOmegaFluidGrid})
     F̃b = zeros(2 * npanels(panels))
     u = zeros(MVector{2,Float64})
 
-    eb_state = EBBeamState([b for b in prob.bodies if b isa EulerBernoulliBeamBody])
+    eb_state = EBBeamState([prob.bodies[i.i_body] for i in prob.bodies.deforming])
 
     return PsiOmegaGridQuantities(; q, q0, Γ, ψ, F̃b, panels, u, eb_state)
 end
