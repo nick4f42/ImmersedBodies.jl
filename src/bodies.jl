@@ -9,6 +9,7 @@ using StaticArrays
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels
 export RigidBody, EulerBernoulliBeamBody, is_static
+export StructureModel, LinearModel
 export EBBeamState, EBBeamStateView, ClampIndexBC, ClampParameterBC
 
 # typeof(@view matrix[i:j, :])
@@ -109,6 +110,9 @@ function _show(io::IO, body::RigidBody, prefix)
     return nothing
 end
 
+abstract type StructureModel end
+struct LinearModel <: StructureModel end
+
 """
     ClampIndexBC(i::Int)
 
@@ -127,7 +131,8 @@ struct ClampParameterBC
     t::Float64
 end
 
-Base.@kwdef struct EulerBernoulliBeamBody <: AbstractBody
+Base.@kwdef struct EulerBernoulliBeamBody{M<:StructureModel} <: AbstractBody
+    model::M
     xref::Matrix{Float64} # Reference locations about which displacements are determined
     x0::Matrix{Float64} # Initial locations
     ds0::Vector{Float64} # Line segment lengths on body in undeformed configuration
@@ -158,6 +163,7 @@ end
 function EulerBernoulliBeamBody(
     segments::Segments,
     bcs::Vector{<:ClampParameterBC};
+    model::StructureModel=LinearModel(),
     kb::Float64,
     ke::Float64,
     m::Float64,
@@ -184,14 +190,16 @@ function EulerBernoulliBeamBody(
     end
 
     return EulerBernoulliBeamBody(;
-        xref, x0, ds0, kb=kb_vec, ke=ke_vec, m=m_vec, bcs=bc_indices
+        model, xref, x0, ds0, kb=kb_vec, ke=ke_vec, m=m_vec, bcs=bc_indices
     )
 end
 
 npanels(body::EulerBernoulliBeamBody) = length(body.ds0)
 
 function _show(io::IO, body::EulerBernoulliBeamBody, prefix)
-    print(io, prefix, "EulerBernoulliBeamBody:")
+    print(io, prefix)
+    summary(io, body)
+    print(io, ':')
     if get(io, :compact, false)
         print(io, " with bcs ", body.bcs)
     else
@@ -240,7 +248,7 @@ function EBBeamState(bodies::Vector)
     return EBBeamState(χ, ζ, ζdot, perbody)
 end
 
-function EBBeamState(bodies::Vector{EulerBernoulliBeamBody})
+function EBBeamState(bodies::Vector{<:EulerBernoulliBeamBody})
     n = sum(npanels, bodies; init=0)
 
     χ = zeros(n, 2)
