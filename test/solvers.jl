@@ -144,6 +144,30 @@ using Test
         solve!(state, prob, 10 * dt)
         @test max_vel(state) < 20
     end
+
+    @testset "linear deforming body" begin
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme)
+
+        bcs = ClampParameterBC.([0.0, 1.0])
+        body = EulerBernoulliBeamBody(
+            partition(Curves.LineSegment((-0.3, 0.5), (0.3, 0.5)), fluid),
+            bcs;
+            model=LinearModel(),
+            kb=1.0,
+            ke=1.0,
+            m=1.0,
+        )
+
+        bodies = BodyGroup([body])
+
+        prob = Problem(fluid, bodies)
+        @test !(prob isa StaticBodyProblem)
+
+        state = initstate(prob)
+
+        solve!(state, prob, 10 * dt)
+        @test max_vel(state) < 20
+    end
 end
 
 end # module
