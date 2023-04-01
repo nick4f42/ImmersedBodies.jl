@@ -148,17 +148,16 @@ using Test
     @testset "linear deforming body" begin
         fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
+        segments1 = partition(Curves.LineSegment((-0.2, 0.5), (0.2, 0.5)), fluid)
+        body1 = RigidBody(segments1)
+
         bcs = ClampParameterBC.([0.0, 1.0])
-        body = EulerBernoulliBeamBody(
-            partition(Curves.LineSegment((-0.3, 0.5), (0.3, 0.5)), fluid),
-            bcs;
-            model=LinearModel(),
-            kb=1.0,
-            ke=1.0,
-            m=1.0,
+        segments2 = partition(Curves.LineSegment((-0.3, -0.5), (0.3, -0.5)), fluid)
+        body2 = EulerBernoulliBeamBody(
+            segments2, bcs; model=LinearModel(), kb=1.0, ke=1.0, m=1.0
         )
 
-        bodies = BodyGroup([body])
+        bodies = BodyGroup([body1, body2])
 
         prob = Problem(fluid, bodies)
         @test !(prob isa StaticBodyProblem)
