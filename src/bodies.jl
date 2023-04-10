@@ -8,9 +8,10 @@ import ..ImmersedBodies: _show
 using StaticArrays
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels
-export RigidBody, EulerBernoulliBeamBody, is_static
-export StructureModel, LinearModel
-export EBBeamState, EBBeamStateView, ClampIndexBC, ClampParameterBC
+export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
+export reference_pos, n_variables, deforming
+export StructureModel, LinearModel, ClampIndexBC, ClampParameterBC
+export DeformationState, DeformationStateView
 
 # typeof(@view matrix[i:j, :])
 const MatrixRowView{T} = SubArray{
@@ -110,8 +111,14 @@ function _show(io::IO, body::RigidBody, prefix)
     return nothing
 end
 
+abstract type DeformingBody <: AbstractBody end
+
 abstract type StructureModel end
-struct LinearModel <: StructureModel end
+
+Base.@kwdef struct LinearModel <: StructureModel
+    m::Vector{Float64}
+    kb::Vector{Float64}
+end
 
 """
     ClampIndexBC(i::Int)
@@ -131,19 +138,20 @@ struct ClampParameterBC
     t::Float64
 end
 
-Base.@kwdef struct EulerBernoulliBeamBody{M<:StructureModel} <: AbstractBody
+struct EulerBernoulliBeam{M<:StructureModel} <: DeformingBody
     model::M
     xref::Matrix{Float64} # Reference locations about which displacements are determined
-    x0::Matrix{Float64} # Initial locations
     ds0::Vector{Float64} # Line segment lengths on body in undeformed configuration
-    kb::Vector{Float64} # Structural bending stiffness values
-    ke::Vector{Float64} # Structural extensional stiffness values
-    m::Vector{Float64} # Structural mass values
     bcs::Vector{ClampIndexBC} # Boundary conditions
 end
 
-initial_pos!(xb, body::EulerBernoulliBeamBody) = xb .= body.x0
-initial_lengths!(ds, body::EulerBernoulliBeamBody) = ds .= body.ds0
+reference_pos(body::EulerBernoulliBeam) = body.xref
+
+# 2 displacements per poin
+n_variables(body::EulerBernoulliBeam{LinearModel}) = 2 * npanels(body)
+
+initial_pos!(xb, body::EulerBernoulliBeam) = xb .= body.xref
+initial_lengths!(ds, body::EulerBernoulliBeam) = ds .= body.ds0
 
 """
     search_closest(xs, x)
@@ -160,43 +168,37 @@ function search_closest(xs, x)
     return xs[i2] - x > x - xs[i1] ? i1 : i2
 end
 
-function EulerBernoulliBeamBody(
+function EulerBernoulliBeam(
+    ::Type{LinearModel},
     segments::Segments,
     bcs::Vector{<:ClampParameterBC};
-    model::StructureModel=LinearModel(),
-    kb::Float64,
-    ke::Float64,
     m::Float64,
+    kb::Float64,
 )
-    x0 = xref = segments.points
+    xref = segments.points
     ds0 = segments.lengths
 
-    nb = size(x0, 1)
-    ke_vec = fill(ke, nb)
-    kb_vec = fill(kb, nb - 1)
-    m_vec = fill(m, nb - 1)
+    nel = size(xref, 1) - 1
+    model = LinearModel(; m=fill(m, nel), kb=fill(kb, nel))
 
-    s = cumsum(ds0)
-    @. s = (s - s[1]) / (s[end] - s[1])
+    ts = cumsum(ds0)
+    @. ts = (ts - ts[1]) / (ts[end] - ts[1])
+
     bc_indices = map(bcs) do bc
         if !(0 <= bc.t <= 1)
-            throw(
-                DomainError(
-                    "boundary condition parameter clamp must be between 0 and 1", bc.t
-                ),
+            (throw ∘ DomainError)(
+                "boundary condition parameter clamp must be between 0 and 1", bc.t
             )
         end
-        ClampIndexBC(search_closest(s, bc.t))
+        ClampIndexBC(search_closest(ts, bc.t))
     end
 
-    return EulerBernoulliBeamBody(;
-        model, xref, x0, ds0, kb=kb_vec, ke=ke_vec, m=m_vec, bcs=bc_indices
-    )
+    return EulerBernoulliBeam(model, xref, ds0, bc_indices)
 end
 
-npanels(body::EulerBernoulliBeamBody) = length(body.ds0)
+npanels(body::EulerBernoulliBeam) = length(body.ds0)
 
-function _show(io::IO, body::EulerBernoulliBeamBody, prefix)
+function _show(io::IO, body::EulerBernoulliBeam, prefix)
     print(io, prefix)
     summary(io, body)
     print(io, ':')
@@ -212,59 +214,6 @@ function _show(io::IO, body::EulerBernoulliBeamBody, prefix)
     end
 
     return nothing
-end
-
-"""
-    EBBeamStateView
-
-A view into [`EBBeamState`](@ref).
-"""
-struct EBBeamStateView
-    χ::MatrixRowView{Float64} # Structural displacements
-    ζ::MatrixRowView{Float64} # Structural velocities
-    ζdot::MatrixRowView{Float64} # Structural accels
-end
-
-"""
-    EBBeamState
-
-The state of deformation of all [`EulerBernoulliBeamBody`](@ref)s.
-"""
-struct EBBeamState
-    χ::Matrix{Float64} # Structural displacements
-    ζ::Matrix{Float64} # Structural velocities
-    ζdot::Matrix{Float64} # Structural accels
-    perbody::Vector{EBBeamStateView}
-end
-
-function EBBeamState(bodies::Vector)
-    @assert isempty(bodies)
-
-    χ = zeros(0, 2)
-    ζ = zeros(0, 2)
-    ζdot = zeros(0, 2)
-    perbody = Vector{EBBeamStateView}(undef, 0)
-
-    return EBBeamState(χ, ζ, ζdot, perbody)
-end
-
-function EBBeamState(bodies::Vector{<:EulerBernoulliBeamBody})
-    n = sum(npanels, bodies; init=0)
-
-    χ = zeros(n, 2)
-    ζ = zeros(n, 2)
-    ζdot = zeros(n, 2)
-
-    perbody = Vector{EBBeamStateView}(undef, length(bodies))
-    i_panel = 0
-    for (i, body) in enumerate(bodies)
-        n_panel = npanels(body)
-        r = i_panel .+ (1:n_panel)
-        perbody[i] = @views EBBeamStateView(χ[r, :], ζ[r, :], ζdot[r, :])
-        i_panel += n_panel
-    end
-
-    return EBBeamState(χ, ζ, ζdot, perbody)
 end
 
 struct DeformingBodyIndex
@@ -291,7 +240,7 @@ struct BodyGroup{B<:AbstractBody} <: AbstractVector{B}
         for (i_body, body) in enumerate(bodies)
             n = npanels(body)
 
-            if body isa EulerBernoulliBeamBody
+            if body isa DeformingBody
                 push!(deforming, DeformingBodyIndex(i_body, n_panel, n_panel_deform))
                 n_panel_deform += n
             end
@@ -308,6 +257,8 @@ Base.getindex(bodies::BodyGroup, i) = bodies.bodies[i]
 Base.IndexStyle(::BodyGroup) = IndexLinear()
 
 npanels(bodies::BodyGroup) = bodies.npanel
+
+deforming(bodies::BodyGroup) = (bodies[i.i_body] for i in bodies.deforming)
 
 Base.show(io::IO, ::MIME"text/plain", bodies::BodyGroup) = _show(io, bodies)
 
@@ -418,6 +369,68 @@ function prescribe_motion!(
     end
 
     return nothing
+end
+
+"""
+    DeformationStateView
+
+A view into [`DeformationState`](@ref).
+"""
+struct DeformationStateView
+    χ::VectorView{Float64} # Structural displacements
+    ζ::VectorView{Float64} # Structural velocities
+    ζdot::VectorView{Float64} # Structural accels
+end
+
+"""
+    DeformationState
+
+The state of deformation of all deforming bodies.
+"""
+struct DeformationState
+    χ::Vector{Float64} # Structural displacements
+    ζ::Vector{Float64} # Structural velocities
+    ζdot::Vector{Float64} # Structural accels
+    perbody::Vector{DeformationStateView}
+end
+
+function DeformationState(vars_per_body)
+    n_bodies = length(vars_per_body)
+    n_vars = sum(vars_per_body; init=0)
+
+    χ = zeros(n_vars)
+    ζ = zeros(n_vars)
+    ζdot = zeros(n_vars)
+
+    perbody = Vector{DeformationStateView}(undef, n_bodies)
+    i = 0
+    for (i_body, n) in enumerate(vars_per_body)
+        r = i .+ (1:n)
+        perbody[i_body] = @views DeformationStateView(χ[r], ζ[r], ζdot[r])
+        i += n
+    end
+
+    return DeformationState(χ, ζ, ζdot, perbody)
+end
+
+function DeformationState(bodies::BodyGroup)
+    return DeformationState(n_variables(body) for body in deforming(bodies))
+end
+
+function Base.similar(deform::DeformationState)
+    vars_per_body = (length(def.χ) for def in deform.perbody)
+    return DeformationState(vars_per_body)
+end
+
+function Base.copy!(dst::DeformationState, src::DeformationState)
+    # Crude check that both states cover the same bodies
+    @assert length(dst.perbody) == length(src.perbody)
+
+    dst.χ .= src.χ
+    dst.ζ .= src.ζ
+    dst.ζdot .= src.ζdot
+
+    return dst
 end
 
 end # module Bodies

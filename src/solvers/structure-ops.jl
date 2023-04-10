@@ -1,22 +1,128 @@
-struct StructuralMatrices
+abstract type StructureOps end
+
+Base.@kwdef mutable struct StackedStructureOps{O<:StructureOps,T1,T2,T3,T4}
+    perbody::Vector{O}
+    M::T1
+    K::T2
+    stru_to_fluid_offset::T3
+    fluid_to_stru_force::T4
+    Khat_inv::Matrix{Float64} # TODO: Use a factorization instead
+    first::Bool # true if Khat_inv has not been initialized
+    dt::Float64 # timestep of the problem
+end
+
+function StackedStructureOps(prob::Problem)
+    ops = map(structure_ops, deforming(prob.bodies))
+
+    Ms = Iterators.map(linearmap ∘ mass_matrix, ops)
+    Ks = Iterators.map(linearmap ∘ stiff_matrix, ops)
+    s2f = Iterators.map(linearmap ∘ structure_to_fluid_offset, ops)
+    f2s = Iterators.map(linearmap ∘ fluid_to_structure_force, ops)
+
+    # Stack the matrices for each body along the diagonal
+    M = cat(Ms...; dims=(1, 2))
+    K = cat(Ks...; dims=(1, 2))
+    stru_to_fluid_offset = cat(s2f...; dims=(1, 2))
+    fluid_to_stru_force = cat(f2s...; dims=(1, 2))
+
+    return StackedStructureOps(;
+        perbody=ops,
+        M=M,
+        K=K,
+        stru_to_fluid_offset=stru_to_fluid_offset,
+        fluid_to_stru_force=fluid_to_stru_force,
+        Khat_inv=Matrix{Float64}(undef, size(K)),
+        first=true,
+        dt=timestep(prob),
+    )
+end
+
+linearmap(x::LinearMap) = x
+linearmap(x) = LinearMap(x)
+
+function init!(
+    ops::StackedStructureOps, bodies::BodyGroup, panels::Panels, states::DeformationState
+)
+    for (i_deform, (; i_body)) in enumerate(bodies.deforming)
+        op = ops.perbody[i_deform]
+        body = bodies[i_body]
+        panel = panels.perbody[i_body]
+        state = states.perbody[i_deform]
+        init!(op, body, panel, state)
+    end
+end
+
+function update!(
+    ops::StackedStructureOps, bodies::BodyGroup, panels::Panels, states::DeformationState
+)
+    update_inv = ops.first
+    ops.first = false
+
+    for (i_deform, (; i_body)) in enumerate(bodies.deforming)
+        op = ops.perbody[i_deform]
+        body = bodies[i_body]
+        panel = panels.perbody[i_body]
+        state = states.perbody[i_deform]
+        update_inv |= update!(op, body, panel, state)
+    end
+
+    if update_inv
+        Khat = ops.K + (4 / ops.dt^2) * ops.M
+
+        # TODO: use a factorization and avoid allocation
+        ops.Khat_inv .= inv(Matrix(Khat))
+    end
+
+    return update_inv
+end
+
+struct EulerBernoulliOps{L1,L2} <: StructureOps
     M::Matrix{Float64}
     K::Matrix{Float64}
     Q::Matrix{Float64}
+    struct_to_fluid::L1 # structure to fluid indices
+    fluid_to_struct::L2 # fluid to structure indices
 end
 
-function StructuralMatrices(body::EulerBernoulliBeamBody)
-    nf = 2 * npanels(body)
-    M = zeros(nf, nf)
-    K = zeros(nf, nf)
-    Q = zeros(nf, nf)
-    return StructuralMatrices(M, K, Q)
+mass_matrix(ops::EulerBernoulliOps) = ops.M
+stiff_matrix(ops::EulerBernoulliOps) = ops.K
+
+function structure_to_fluid_offset(ops::EulerBernoulliOps)
+    return ops.struct_to_fluid
 end
 
-function update!(mats::StructuralMatrices, body::EulerBernoulliBeamBody, panels::PanelView)
-    nb = npanels(body) # Number of body points
-    nel = nb - 1 # Number of finite elements
-    (; M, K, Q) = mats
+function fluid_to_structure_force(ops::EulerBernoulliOps)
+    return ops.Q * ops.fluid_to_struct
+end
 
+function structure_ops(body::EulerBernoulliBeam{LinearModel})
+    nb = npanels(body)
+
+    n = 2 * nb
+
+    M = zeros(n, n)
+    K = zeros(n, n)
+    Q = zeros(n, n)
+
+    struct_to_fluid = LinearMap(n) do x_fluid, x_struct
+        x_fluid .= vec(transpose(reshape(x_struct, 2, nb)))
+    end
+
+    fluid_to_struct = LinearMap(n) do x_struct, x_fluid
+        x_struct .= vec(transpose(reshape(x_fluid, nb, 2)))
+    end
+
+    return EulerBernoulliOps(M, K, Q, struct_to_fluid, fluid_to_struct)
+end
+
+function init!(
+    ops::EulerBernoulliOps,
+    body::EulerBernoulliBeam{LinearModel},
+    panels::PanelView,
+    ::DeformationStateView,
+)
+    nel = npanels(body) - 1 # Number of finite elements
+    (; M, K, Q) = ops
     M .= 0
     K .= 0
     Q .= 0
@@ -24,8 +130,8 @@ function update!(mats::StructuralMatrices, body::EulerBernoulliBeamBody, panels:
     # We will build these matrices by element and assemble in a loop
     for i_el in 1:nel
         Δs = panels.len[i_el]
-        m = body.m[i_el]
-        kb = body.kb[i_el]
+        m = body.model.m[i_el]
+        kb = body.model.kb[i_el]
 
         # Indices corresponding with the 4 unknowns associated w/ each element
         el_ind = @. (i_el - 1) * 2 + (1:4)
@@ -78,6 +184,13 @@ function update!(mats::StructuralMatrices, body::EulerBernoulliBeamBody, panels:
             K[k, k] = 1.0
         end
     end
+end
 
-    return nothing
+function update!(
+    ::EulerBernoulliOps,
+    ::EulerBernoulliBeam{LinearModel},
+    ::PanelView,
+    ::DeformationStateView,
+)
+    return false # indicate no changes
 end

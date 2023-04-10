@@ -153,9 +153,7 @@ using Test
 
         bcs = ClampParameterBC.([0.0, 1.0])
         segments2 = partition(Curves.LineSegment((-0.3, -0.5), (0.3, -0.5)), fluid)
-        body2 = EulerBernoulliBeamBody(
-            segments2, bcs; model=LinearModel(), kb=1.0, ke=1.0, m=1.0
-        )
+        body2 = EulerBernoulliBeam(LinearModel, segments2, bcs; m=1.0, kb=1.0)
 
         bodies = BodyGroup([body1, body2])
 

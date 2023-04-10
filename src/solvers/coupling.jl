@@ -230,18 +230,6 @@ function (redist::RedistributionWeights)(qout, qin)
     return nothing
 end
 
-function Itilde_linearmap(nb_deform::Int)
-    function structure_to_fluid(F_sm, F_bg)
-        return F_sm .= vec(transpose(reshape(F_bg, 2, nb_deform)))
-    end
-
-    function fluid_to_structure(F_bg, F_sm)
-        return F_bg .= vec(transpose(reshape(F_sm, nb_deform, 2)))
-    end
-
-    return LinearMap(structure_to_fluid, fluid_to_structure, 2 * nb_deform)
-end
-
 function deforming_coord_unfilter(bodies::BodyGroup)
     nb_all = npanels(bodies)
     nb_deform = bodies.npanel_deform
@@ -329,54 +317,47 @@ function (coupler::RigidSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     return nothing
 end
 
-struct EulerBernoulliSurfaceCoupler{
-    P<:Problem,R<:RedistributionWeights,ME,MB,MW,MI,MF,MU
+struct DeformingSurfaceCoupler{
+    P<:Problem,O<:StackedStructureOps,R<:RedistributionWeights,ME,MB,MW,MF,MU
 } <: SurfaceCoupler
     prob::P
     qtot::Vector{Float64}
-    mats::StructuralMatrices
+    ops::O
     reg::Reg
     redist::R
     E::ME
     B::MB
     W::MW
-    Itilde::MI
     filter_deform::MF
     unfilter_deform::MU
-    χ_k::Vector{Float64}
-    ζ_k::Vector{Float64}
-    ζdot_k::Vector{Float64}
+    deform_k::DeformationState
 end
 
-function EulerBernoulliSurfaceCoupler(;
-    prob, qtot, mats, reg, redist, E, B, Itilde, χ_k, ζ_k, ζdot_k
-)
+function DeformingSurfaceCoupler(; prob, state, qtot, qtmp, reg, E, B)
+    ops = StackedStructureOps(prob)
+    init!(ops, prob.bodies, state.qty.panels, state.qty.deform)
+
+    redist = RedistributionWeights(; E, qtmp)
+
     W = W_linearmap(redist)
     filter_deform = deforming_coord_filter(prob.bodies)
     unfilter_deform = deforming_coord_unfilter(prob.bodies)
-    return EulerBernoulliSurfaceCoupler(
-        prob,
-        qtot,
-        mats,
-        reg,
-        redist,
-        E,
-        B,
-        W,
-        Itilde,
-        filter_deform,
-        unfilter_deform,
-        χ_k,
-        ζ_k,
-        ζdot_k,
+
+    deform_k = similar(state.qty.deform)
+
+    return DeformingSurfaceCoupler(
+        prob, qtot, ops, reg, redist, E, B, W, filter_deform, unfilter_deform, deform_k
     )
 end
 
-function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
-    (; F̃b, q0, panels, eb_state) = quantities(state)
-    (; prob, qtot, mats, reg, redist, E, B, W, Itilde, filter_deform, unfilter_deform) =
+function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
+    (; F̃b, q0, panels, deform) = quantities(state)
+    (; prob, qtot, ops, reg, redist, E, B, W, filter_deform, unfilter_deform, deform_k) =
         coupler
-    (; M, K, Q) = mats
+    (; M, K, Khat_inv, stru_to_fluid_offset, fluid_to_stru_force) = ops
+    # stru_to_fluid_offset: Equivalent of Itilde in previous versions
+    # fluid_to_stru_force: Equivalent of Q * Itilde' in pervious versions
+
     dt = timestep(prob)
     h = (gridstep ∘ baselevel ∘ discretized)(prob.fluid)
 
@@ -386,35 +367,38 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
     # TODO: Add external option for tolerance
     tol_fsi = 1.e-5
 
-    # Only one deforming body is currently supported
-    deform = only(eb_state.perbody)
-    χ = vec(deform.χ)
-    ζ = vec(deform.ζ)
-    ζdot = vec(deform.ζdot)
+    copy!(deform_k, deform)
 
-    (; χ_k, ζ_k, ζdot_k) = coupler
-    copy!(χ_k, χ)
-    copy!(ζ_k, ζ)
-    copy!(ζdot_k, ζdot)
+    (; χ, ζ, ζdot) = deform
+    χ_k = deform_k.χ
+    ζ_k = deform_k.ζ
+    ζdot_k = deform_k.ζdot
 
-    (; i_body) = only(prob.bodies.deforming)
-    body = prob.bodies[i_body]
-    bodypanels = panels.perbody[i_body]
+    # References the operations in ops, so these are updated when ops is updated
+    Q_W = fluid_to_stru_force * filter_deform * W * 0.5 / dt # This is QWx in Fortran code
+
+    B2 =
+        unfilter_deform *
+        stru_to_fluid_offset *
+        Khat_inv *
+        fluid_to_stru_force *
+        filter_deform *
+        W *
+        h / dt^2
+    Binv = Binv_linearmap(prob, B, B2)
 
     err_fsi = Inf
     while err_fsi > tol_fsi
-        update!(mats, body, bodypanels)
+        # Update structural operations (matrices) with current deformation
+        update!(ops, prob.bodies, panels, deform_k)
 
-        Khat = K + (4 / dt^2) * M
-        Khat_inv = inv(Khat)
-        Q_W = Q * Itilde' * filter_deform * W * 0.5 / dt # This is QWx in Fortran code
-        Q_Itilde_W =
-            unfilter_deform * Itilde * Khat_inv * Q * Itilde' * filter_deform * W * h / dt^2
+        # Update the regularization (E matrix) for each deforming body
+        for (; i_body) in prob.bodies.deforming
+            update!(reg, panels.perbody[i_body], i_body)
+        end
 
-        update!(reg, bodypanels, i_body) # only 1 body, so index is 1
+        # Update the redistribution weights
         update!(redist)
-
-        Binv = Binv_linearmap(prob, B, Q_Itilde_W)
 
         # Develop RHS for linearized system for stresses
         F̃_kp1 = similar(F̃b)
@@ -435,7 +419,7 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
 
         r_ζ = Khat_inv * r_ζ
         F_bg = -h * (2 / dt * r_ζ + r_c)
-        F_sm = (unfilter_deform * Itilde) * F_bg
+        F_sm = (unfilter_deform * stru_to_fluid_offset) * F_bg
         rhsf = F_sm + F̃_kp1
 
         mul!(F̃b, Binv, rhsf) # Solve for the stresses
@@ -452,24 +436,27 @@ function (coupler::EulerBernoulliSurfaceCoupler)(state::StatePsiOmegaGridCNAB, q
         err_fsi = max_χ > 1e-13 ? max_Δχ / max_χ : max_Δχ
 
         # Update all structural quantities
-        χ_k = χ_k + Δχ
-        ζ_k = -ζ + 2 / dt * (χ_k - χ)
-        ζdot_k = 4 / dt^2 * (χ_k - χ) - 4 / dt * ζ - ζdot
+        @. χ_k = χ_k + Δχ
+        @. ζ_k = -ζ + 2 / dt * (χ_k - χ)
+        @. ζdot_k = 4 / dt^2 * (χ_k - χ) - 4 / dt * ζ - ζdot
 
-        # TODO: Make a loop for each deforming body
+        # Update the body panels that interface with the fluid
+        for (op, i) in zip(ops.perbody, prob.bodies.deforming)
+            body = prob.bodies[i.i_body]
+            bodypanels = panels.perbody[i.i_body]
+            stru2fluid = structure_to_fluid_offset(op)
 
-        mul!(vec(bodypanels.pos), Itilde, χ_k)
-        bodypanels.pos .+= body.xref
+            mul!(vec(bodypanels.pos), stru2fluid, χ_k)
+            bodypanels.pos .+= reference_pos(body)
 
-        # Recalculate segment lengths based on positions
-        recalculate_lengths!(bodypanels)
+            # Recalculate segment lengths based on positions
+            recalculate_lengths!(bodypanels)
 
-        mul!(vec(bodypanels.vel), Itilde, ζ_k)
+            mul!(vec(bodypanels.vel), stru2fluid, ζ_k)
+        end
     end
 
-    copy!(χ, χ_k)
-    copy!(ζ, ζ_k)
-    copy!(ζdot, ζdot_k)
+    copy!(deform, deform_k)
 
     return nothing
 end

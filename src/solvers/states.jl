@@ -18,7 +18,7 @@ Base.@kwdef struct PsiOmegaGridQuantities
     F̃b::Vector{Float64} # Body forces * dt
     panels::Panels # Structural panels
     u::MVector{2,Float64} # [ux, uy] freestream velocity
-    eb_state::EBBeamState # Euler bernoulli beam structure
+    deform::DeformationState # State of each deforming body
 end
 
 function PsiOmegaGridQuantities(prob::Problem{<:PsiOmegaFluidGrid})
@@ -33,10 +33,9 @@ function PsiOmegaGridQuantities(prob::Problem{<:PsiOmegaFluidGrid})
     panels = Panels(prob.bodies)
     F̃b = zeros(2 * npanels(panels))
     u = zeros(MVector{2,Float64})
+    deform = DeformationState(prob.bodies)
 
-    eb_state = EBBeamState([prob.bodies[i.i_body] for i in prob.bodies.deforming])
-
-    return PsiOmegaGridQuantities(; q, q0, Γ, ψ, F̃b, panels, u, eb_state)
+    return PsiOmegaGridQuantities(; q, q0, Γ, ψ, F̃b, panels, u, deform)
 end
 
 bodypanels(state::PsiOmegaGridState) = quantities(state).panels
