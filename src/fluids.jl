@@ -47,4 +47,20 @@ The [`FluidDiscretization`](@ref) of a fluid.
 """
 function discretized end
 
+"""
+    body_segment_length(fluid::AbstractFluid)
+
+The optimal body segment length of a body simulated with `fluid`.
+"""
+function body_segment_length end
+
+"""
+    partition(curve::Curve, fluid::AbstractFluid) :: Segments
+
+Partition a curve to best be simulated as a body in `fluid`.
+"""
+function Curves.partition(curve::Curve, fluid::AbstractFluid)
+    return partition(curve, body_segment_length(fluid))
+end
+
 Base.show(io::IO, ::MIME"text/plain", fluid::AbstractFluid) = _show(io, fluid)

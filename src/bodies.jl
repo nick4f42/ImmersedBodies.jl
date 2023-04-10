@@ -7,7 +7,7 @@ import ..ImmersedBodies: _show
 
 using StaticArrays
 
-export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, body_segment_length
+export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels
 export RigidBody, is_static
 
 # typeof(@view matrix[i:j, :])
@@ -51,13 +51,6 @@ The number of structural panels in a body or bodies.
 function npanels end
 
 """
-    body_segment_length(fluid::AbstractFluid)
-
-The optimal body segment length of a body simulated with `fluid`.
-"""
-function body_segment_length end
-
-"""
     RigidBody(
         pos::AbstractMatrix{Float64},
         len::AbstractVector{Float64},
@@ -82,19 +75,13 @@ initial_pos!(xb, body::RigidBody) = xb .= body.pos
 initial_lengths!(ds, body::RigidBody) = ds .= body.len
 
 """
-    RigidBody(
-        fluid::AbstractFluid,
-        curve::Curve,
-        frame::AbstractFrame=DiscretizationFrame(),
-    ) :: AbstractBody
+    RigidBody(segments::Segments, frame=DiscretizationFrame()) :: AbstractBody
 
 # Arguments
-- `fluid`: The fluid that the body will be simulated in.
-- `curve`: The curve that defines the shape of the rigid body.
-- `frame`: Prescribed motion of the body.
+- `segments::Segments`: Points and lengths on the body.
+- `frame::AbstractFrame`: Prescribed motion of the body.
 """
-function RigidBody(fluid::AbstractFluid, curve::Curve, frame=DiscretizationFrame())
-    segments = partition(curve, body_segment_length(fluid))
+function RigidBody(segments::Segments, frame=DiscretizationFrame())
     return RigidBody(segments.points, segments.lengths, frame)
 end
 

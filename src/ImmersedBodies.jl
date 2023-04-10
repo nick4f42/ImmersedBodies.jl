@@ -15,7 +15,8 @@ export AbstractFrame, BaseFrame, GlobalFrame, DiscretizationFrame
 export Direction, XAxis, YAxis
 export OffsetFrame, OffsetFrameInstant
 
-export Curves, AbstractBody, BodyGroup, RigidBody, Panels, PanelView, npanels, bodypanels
+export Curves, Segments, partition
+export AbstractBody, BodyGroup, RigidBody, Panels, PanelView, npanels, bodypanels
 
 export AbstractBody, BodyGroup, RigidBody, npanels, Panels, PanelView
 export Quantities, quantity, coordinates

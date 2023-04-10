@@ -65,7 +65,7 @@ using Test
 
         # Body outside of innermost fluid grid
         curve = Curves.LineSegment((0.0, 1.5), (0.0, 2.1))
-        body = RigidBody(fluid, curve)
+        body = RigidBody(partition(curve, fluid))
         bodies = BodyGroup([body])
 
         prob = Problem(fluid, bodies)
@@ -80,7 +80,7 @@ using Test
         @test discretized(fluid) isa MultiLevelGrid
 
         curve = Curves.Circle(0.5)
-        body = RigidBody(fluid, curve)
+        body = RigidBody(partition(curve, fluid))
         bodies = BodyGroup([body])
 
         prob = Problem(fluid, bodies)
@@ -104,7 +104,7 @@ using Test
         fluid = PsiOmegaFluidGrid(flow, grids; scheme, frame)
 
         curve = Curves.Circle(0.5)
-        body = RigidBody(fluid, curve)
+        body = RigidBody(partition(curve, fluid))
         bodies = BodyGroup([body])
 
         prob = Problem(fluid, bodies)
@@ -127,13 +127,11 @@ using Test
             return OffsetFrameInstant(r, v, θ, Ω)
         end
         body1 = RigidBody(
-            fluid,
-            Curves.LineSegment((-0.3, 0.5), (0.3, 0.5)),
+            partition(Curves.LineSegment((-0.3, 0.5), (0.3, 0.5)), fluid),
             OffsetFrame(offset, DiscretizationFrame()),
         )
         body2 = RigidBody(
-            fluid,
-            Curves.LineSegment((-0.3, -0.5), (0.3, -0.5)),
+            partition(Curves.LineSegment((-0.3, -0.5), (0.3, -0.5)), fluid),
             OffsetFrame(offset, GlobalFrame()),
         )
         bodies = BodyGroup([body1, body2])

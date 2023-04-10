@@ -17,7 +17,7 @@ function placeholder_problem()
     fluid = PsiOmegaFluidGrid(flow, grids; scheme=CNAB(0.005))
 
     curve = Curves.Circle(0.3)
-    body = RigidBody(fluid, curve)
+    body = RigidBody(partition(curve, fluid))
     bodies = BodyGroup([body])
 
     return Problem(fluid, bodies)

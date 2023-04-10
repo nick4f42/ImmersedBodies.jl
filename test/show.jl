@@ -32,9 +32,10 @@ end
 end
 
 curve = Curves.Circle()
+segments = partition(curve, fluid)
 
-@testshow body1 = RigidBody(fluid, curve)
-@testshow body2 = RigidBody(fluid, curve, frame)
+@testshow body1 = RigidBody(segments)
+@testshow body2 = RigidBody(segments, frame)
 
 @testshow bodies = BodyGroup([body1, body2])
 
