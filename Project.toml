@@ -1,11 +1,6 @@
 name = "ImmersedBodies"
 uuid = "75ad5bb6-0138-40d0-96b3-a020eab9d113"
-authors = [
-    "Nick OBrien <nick4f42@proton.me>",
-    "Arturo Burgos <burgos3@illinois.edu>",
-    "Andres Goza <agoza@illinois.edu>",
-    "Jared Callaham <jared.callaham@gmail.com>",
-]
+authors = ["Nick OBrien <nick4f42@proton.me>", "Arturo Burgos <burgos3@illinois.edu>", "Andres Goza <agoza@illinois.edu>", "Jared Callaham <jared.callaham@gmail.com>"]
 version = "0.1.0"
 
 [deps]
