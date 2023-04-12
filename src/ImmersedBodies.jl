@@ -19,8 +19,9 @@ export Curves, Segments, partition
 export AbstractBody, BodyGroup, RigidBody, Panels, PanelView, npanels, bodypanels
 
 export AbstractBody, BodyGroup, RigidBody, npanels, Panels, PanelView
-export DeformingBody, EulerBernoulliBeam, ClampIndexBC, ClampParameterBC
-export StructureModel, LinearModel
+export AbstractBodyPoint, BodyPointIndex, BodyPointParam
+export DeformingBody, DeformingBodyBC, bc_point, ClampBC, PinBC
+export StructureModel, LinearModel, EulerBernoulliBeam
 export Quantities, quantity, coordinates
 
 export Timesteps, TimestepCondition, AllTimesteps, timestep_times, timestep_indices

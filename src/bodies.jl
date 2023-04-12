@@ -8,9 +8,11 @@ import ..ImmersedBodies: _show
 using StaticArrays
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels
+export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
+export DeformingBodyBC, bc_point, ClampBC, PinBC
 export reference_pos, n_variables, deforming
-export StructureModel, LinearModel, ClampIndexBC, ClampParameterBC
+export StructureModel, LinearModel
 export DeformationState, DeformationStateView
 
 # typeof(@view matrix[i:j, :])
@@ -27,6 +29,37 @@ const VectorView{T} = SubArray{T,1,Vector{T},Tuple{UnitRange{Int}},true}
 A structural body.
 """
 abstract type AbstractBody end
+
+"""
+    AbstractBodyPoint
+
+A point on a body.
+"""
+abstract type AbstractBodyPoint end
+
+"""
+    BodyPointIndex(i) :: AbstractBodyPoint
+
+The point on a body at index `i`.
+"""
+struct BodyPointIndex <: AbstractBodyPoint
+    i::Int
+end
+
+"""
+    BodyPointParam(t) :: AbstractBodyPoint
+
+The point nearest to a portion of `t` along the arclength of a body.
+"""
+struct BodyPointParam <: AbstractBodyPoint
+    t::Float64
+    function BodyPointParam(t)
+        if !(0 <= t <= 1)
+            (throw ∘ DomainError)(t, "t must be between 0 and 1")
+        end
+        return new(t)
+    end
+end
 
 Base.show(io::IO, ::MIME"text/plain", body::AbstractBody) = _show(io, body)
 
@@ -120,29 +153,45 @@ Base.@kwdef struct LinearModel <: StructureModel
     kb::Vector{Float64}
 end
 
-"""
-    ClampIndexBC(i::Int)
+abstract type DeformingBodyBC{P<:AbstractBodyPoint} end
 
-A boundary condition that index `i` on a body's points is clamped.
-"""
-struct ClampIndexBC
-    i::Int
+# TODO: Only shorten the type name when displaying a value of this type
+#       println(bc) should shorten the type name
+#       println(typeof(bc)) should keep the entire type name
+function Base.show(io::IO, T::Type{<:DeformingBodyBC})
+    return print(io, nameof(T)) # Omit type parameters by default
 end
 
 """
-    ClampParameterBC(t::Float64)
+    ClampBC(point::AbstractBodyPoint) :: DeformingBodyBC
 
-A boundary condition that `curve(t)` on a [`Curve`](@ref) is clamped.
+Fixes the position and rotation of a point on a deforming body.
 """
-struct ClampParameterBC
-    t::Float64
+struct ClampBC{P} <: DeformingBodyBC{P}
+    point::P
 end
 
-struct EulerBernoulliBeam{M<:StructureModel} <: DeformingBody
+bc_point(bc::ClampBC) = bc.point
+set_point(::ClampBC, p::AbstractBodyPoint) = ClampBC(p)
+
+"""
+    PinBC(point::AbstractBodyPoint) :: DeformingBodyBC
+
+Fixes the position of a point on a deforming body.
+"""
+struct PinBC{P} <: DeformingBodyBC{P}
+    point::P
+end
+
+bc_point(bc::PinBC) = bc.point
+set_point(::PinBC, p::AbstractBodyPoint) = PinBC(p)
+
+struct EulerBernoulliBeam{M<:StructureModel,B<:DeformingBodyBC{BodyPointIndex}} <:
+       DeformingBody
     model::M
     xref::Matrix{Float64} # Reference locations about which displacements are determined
     ds0::Vector{Float64} # Line segment lengths on body in undeformed configuration
-    bcs::Vector{ClampIndexBC} # Boundary conditions
+    bcs::Vector{B} # Boundary conditions
 end
 
 reference_pos(body::EulerBernoulliBeam) = body.xref
@@ -152,6 +201,30 @@ n_variables(body::EulerBernoulliBeam{LinearModel}) = 2 * npanels(body)
 
 initial_pos!(xb, body::EulerBernoulliBeam) = xb .= body.xref
 initial_lengths!(ds, body::EulerBernoulliBeam) = ds .= body.ds0
+
+npanels(body::EulerBernoulliBeam) = length(body.ds0)
+
+function EulerBernoulliBeam(
+    ::Type{LinearModel},
+    segments::Segments,
+    bcs::AbstractVector{<:ClampBC};
+    m::Float64,
+    kb::Float64,
+)
+    xref = segments.points
+    ds0 = segments.lengths
+
+    nel = size(xref, 1) - 1
+    model = LinearModel(; m=fill(m, nel), kb=fill(kb, nel))
+
+    ts = cumsum(ds0)
+    @. ts = (ts - ts[1]) / (ts[end] - ts[1])
+
+    # Make sure bcs are based on indices and not parameters along the curve
+    bc_indices = [to_index_bc(ts, bc) for bc in bcs]
+
+    return EulerBernoulliBeam(model, xref, ds0, bc_indices)
+end
 
 """
     search_closest(xs, x)
@@ -168,35 +241,15 @@ function search_closest(xs, x)
     return xs[i2] - x > x - xs[i1] ? i1 : i2
 end
 
-function EulerBernoulliBeam(
-    ::Type{LinearModel},
-    segments::Segments,
-    bcs::Vector{<:ClampParameterBC};
-    m::Float64,
-    kb::Float64,
-)
-    xref = segments.points
-    ds0 = segments.lengths
-
-    nel = size(xref, 1) - 1
-    model = LinearModel(; m=fill(m, nel), kb=fill(kb, nel))
-
-    ts = cumsum(ds0)
-    @. ts = (ts - ts[1]) / (ts[end] - ts[1])
-
-    bc_indices = map(bcs) do bc
-        if !(0 <= bc.t <= 1)
-            (throw ∘ DomainError)(
-                "boundary condition parameter clamp must be between 0 and 1", bc.t
-            )
-        end
-        ClampIndexBC(search_closest(ts, bc.t))
-    end
-
-    return EulerBernoulliBeam(model, xref, ds0, bc_indices)
+# Ensure the boundary condition is based on an index along the body
+function to_index_bc(::AbstractVector{Float64}, bc::DeformingBodyBC{BodyPointIndex})
+    return bc
 end
-
-npanels(body::EulerBernoulliBeam) = length(body.ds0)
+function to_index_bc(ts::AbstractVector{Float64}, bc::DeformingBodyBC{BodyPointParam})
+    point = bc_point(bc)
+    i = search_closest(ts, point.t)
+    return set_point(bc, BodyPointIndex(i))
+end
 
 function _show(io::IO, body::EulerBernoulliBeam, prefix)
     print(io, prefix)

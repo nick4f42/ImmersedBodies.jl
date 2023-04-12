@@ -170,10 +170,10 @@ function init!(
         end
     end
 
-    # Account for BCs (clamped-clamped)
-    for bc::ClampIndexBC in body.bcs
-        i = bc.i
-        for j in 1:2
+    # Account for BCs
+    for bc in body.bcs
+        i = bc_point(bc).i
+        for j in bc_indices(LinearModel, bc)
             k = 2 * (i - 1) + j
             M[k, :] .= 0.0
             M[:, k] .= 0.0
@@ -185,6 +185,8 @@ function init!(
         end
     end
 end
+
+bc_indices(::Type{LinearModel}, ::ClampBC) = (1, 2)
 
 function update!(
     ::EulerBernoulliOps,
