@@ -196,3 +196,50 @@ function update!(
 )
     return false # indicate no changes
 end
+
+struct SpringedMembraneOps{L1,L2} <: StructureOps
+    M::Matrix{Float64}
+    K::Matrix{Float64}
+    spring_to_fluid_offset::L1
+    fluid_to_spring_force::L2
+end
+
+mass_matrix(ops::SpringedMembraneOps) = ops.M
+stiff_matrix(ops::SpringedMembraneOps) = ops.K
+
+structure_to_fluid_offset(ops::SpringedMembraneOps) = ops.spring_to_fluid_offset
+fluid_to_structure_force(ops::SpringedMembraneOps) = ops.fluid_to_spring_force
+
+function structure_ops(body::SpringedMembrane)
+    n_spring = body.n_spring
+    nf = 2 * npanels(body)
+
+    M = zeros(n_spring, n_spring)
+    K = zeros(n_spring, n_spring)
+
+    spring_to_fluid_offset = LinearMap(nf, n_spring) do x_body, x_spring
+        # TODO: Apply gaussian weights to offset membrane
+        error("implement")
+    end
+
+    fluid_to_spring_force = LinearMap(n_spring, nf) do f_spring, f_body
+        # TODO: Integrate normal force on membrane and apply to top spring
+        error("implement")
+    end
+
+    return SpringedMembraneOps(M, K, spring_to_fluid_offset, fluid_to_spring_force)
+end
+
+function init!(
+    ops::SpringedMembraneOps, body::SpringedMembrane, ::PanelView, ::DeformationStateView
+)
+    # TODO: Initialize ops.M and ops.K
+    error("implement")
+    return nothing
+end
+
+function update!(
+    ::SpringedMembraneOps, ::SpringedMembrane, ::PanelView, ::DeformationStateView
+)
+    return false # indicate no changes
+end

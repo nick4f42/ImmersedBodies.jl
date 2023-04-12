@@ -19,6 +19,7 @@ export Curves, Segments, partition
 export AbstractBody, BodyGroup, RigidBody, Panels, PanelView, npanels, bodypanels
 
 export AbstractBody, BodyGroup, RigidBody, npanels, Panels, PanelView
+export SpringedMembrane, diatomic_phononic_material
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export DeformingBody, DeformingBodyBC, bc_point, ClampBC, PinBC
 export StructureModel, LinearModel, EulerBernoulliBeam

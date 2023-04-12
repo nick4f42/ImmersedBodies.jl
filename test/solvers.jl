@@ -165,6 +165,37 @@ using Test
         solve!(state, prob, 10 * dt)
         @test max_vel(state) < 20
     end
+
+    @testset "springed membrane body" begin
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme)
+
+        curve = Curves.LineSegment((-0.4, 0.3), (0.4, -0.3))
+        segments = partition(curve, fluid)
+
+        n = size(segments.points, 1)
+        n_compliant = round(Int, 0.3 * n)
+        r_compliant = 1:n_compliant
+        r_rigid = (n_compliant + 1):n
+
+        compliant = Segments(segments.points[r_compliant, :], segments.lengths[r_compliant])
+        rigid = Segments(segments.points[r_rigid, :], segments.lengths[r_rigid])
+
+        m = [1.0, 2.0, 3.0]
+        k = [3.0, 2.0, 5.0]
+        compliant_body = SpringedMembrane(compliant; m, k, align_normal=(0.0, 1.0))
+
+        rigid_body = RigidBody(rigid)
+
+        bodies = BodyGroup([compliant_body, rigid_body])
+
+        prob = Problem(fluid, bodies)
+        @test !(prob isa StaticBodyProblem)
+
+        state = initstate(prob)
+
+        solve!(state, prob, 10 * dt)
+        @test max_vel(state) < 20
+    end
 end
 
 end # module

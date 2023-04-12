@@ -10,6 +10,7 @@ using StaticArrays
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
+export SpringedMembrane, diatomic_phononic_material
 export DeformingBodyBC, bc_point, ClampBC, PinBC
 export reference_pos, n_variables, deforming
 export StructureModel, LinearModel
@@ -267,6 +268,59 @@ function _show(io::IO, body::EulerBernoulliBeam, prefix)
     end
 
     return nothing
+end
+
+struct SpringedMembrane <: DeformingBody
+    xref::Matrix{Float64} # Reference position of membrane
+    ds0::Vector{Float64} # Lengths at each membrane reference position
+    spring_dir::SVector{2,Float64} # direction of the spring
+    weights::Matrix{Float64} # Weights for deforming membrane
+    n_spring::Int
+end
+
+reference_pos(body::SpringedMembrane) = body.xref
+
+n_variables(body::SpringedMembrane) = body.n_spring
+
+initial_pos!(xb, body::SpringedMembrane) = xb .= body.xref
+initial_lengths!(ds, body::SpringedMembrane) = ds .= body.ds0
+
+npanels(body::SpringedMembrane) = length(body.ds0)
+
+function SpringedMembrane(
+    segments::Segments; m::AbstractVector{Float64}, k::AbstractVector{Float64}, align_normal
+)
+    xref = segments.points
+    ds0 = segments.lengths
+
+    nb = size(xref, 1)
+
+    @assert axes(m) == axes(k)
+    n_spring = length(m)
+
+    # TODO: Use xref to find normal at center, align using align_normal
+    error("implement")
+    spring_dir = SVector(0.0, 1.0)
+
+    # TODO: Set weights based on normals and gaussian distribution
+    error("implement")
+    weights = zeros(nb, 2)
+
+    return SpringedMembrane(xref, ds0, spring_dir, weights, n_spring)
+end
+
+function diatomic_phononic_material(
+    segments::Segments; n_cell::Int, m::NTuple{2,Float64}, k::NTuple{2,Float64}, kw...
+)
+    n_spring = 2 * n_cell
+
+    mvec = Vector{Float64}(undef, n_spring)
+    kvec = Vector{Float64}(undef, n_spring)
+
+    # TODO: Set mvec and kvec using (m1, m2) and (k1, k2)
+    error("implement")
+
+    return SpringedMembrane(segments; m=mvec, k=kvec, kw...)
 end
 
 struct DeformingBodyIndex
