@@ -5,6 +5,8 @@ using ..ImmersedBodies.Dynamics
 using ..ImmersedBodies.Curves
 import ..ImmersedBodies: _show
 
+using LinearAlgebra
+
 using StaticArrays
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
@@ -273,8 +275,8 @@ end
 struct SpringedMembrane <: DeformingBody
     xref::Matrix{Float64} # Reference position of membrane
     ds0::Vector{Float64} # Lengths at each membrane reference position
-    spring_dir::SVector{2,Float64} # direction of the spring
-    weights::Matrix{Float64} # Weights for deforming membrane
+    normals::Matrix{Float64} # Normals at each point in membrane
+    deform_weights::Matrix{Float64} # Weights for deforming membrane
     n_spring::Int
 end
 
@@ -298,15 +300,49 @@ function SpringedMembrane(
     @assert axes(m) == axes(k)
     n_spring = length(m)
 
-    # TODO: Use xref to find normal at center, align using align_normal
-    error("implement")
-    spring_dir = SVector(0.0, 1.0)
+    s = cumsum(ds0)
 
-    # TODO: Set weights based on normals and gaussian distribution
-    error("implement")
-    weights = zeros(nb, 2)
+    # -1 to 1 across compliant section
+    r = @. 2 * (s - s[1]) / (s[end] - s[1]) - 1
 
-    return SpringedMembrane(xref, ds0, spring_dir, weights, n_spring)
+    function secant(i1, i2)
+        dx = xref[i2, 1] - xref[i1, 1]
+        dy = xref[i2, 2] - xref[i1, 2]
+        return SVector(dx, dy) / hypot(dx, dy)
+    end
+
+    function rotate(v)
+        vx, vy = v
+        return SVector(-vy, vx)
+    end
+
+    i1 = nb ÷ 2
+    i2 = i1 + 1
+    flipnormal = dot(rotate(secant(i1, i2)), align_normal) < 0
+
+    function normal(i1, i2)
+        v = rotate(secant(i1, i2))
+        return flipnormal ? -v : v
+    end
+
+    normals = zeros(nb, 2)
+    normals[1, :] .= normal(1, 2)
+    normals[end, :] .= normal(nb - 1, nb)
+    for i in 2:(nb - 1)
+        normals[i, :] .= normal(i - 1, i + 1)
+    end
+
+    deform_weights = zeros(nb, 2)
+    for i in 1:nb
+        nx, ny = @view normals[i, :]
+
+        # TODO: Set deformation weights based on normal and r[i]
+        # deform_weights[i, 1] =
+        # deform_weights[i, 2] =
+    end
+    error("implement")
+
+    return SpringedMembrane(xref, ds0, normals, deform_weights, n_spring)
 end
 
 function diatomic_phononic_material(
