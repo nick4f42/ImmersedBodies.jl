@@ -211,20 +211,28 @@ structure_to_fluid_offset(ops::SpringedMembraneOps) = ops.spring_to_fluid_offset
 fluid_to_structure_force(ops::SpringedMembraneOps) = ops.fluid_to_spring_force
 
 function structure_ops(body::SpringedMembrane)
-    n_spring = body.n_spring
-    nf = 2 * npanels(body)
+    n_spring = length(body.m)
+    nb = npanels(body)
+    nf = 2 * nb
 
     M = zeros(n_spring, n_spring)
     K = zeros(n_spring, n_spring)
 
-    spring_to_fluid_offset = LinearMap(nf, n_spring) do x_body, x_spring
-        # TODO: Apply gaussian weights to offset membrane
-        error("implement")
+    spring_to_fluid_offset = LinearMap(nf, n_spring) do dx_body, dx_spring
+        dx_body .= vec(body.deform_weights) .* dx_spring[end]
+        return dx_body
     end
 
     fluid_to_spring_force = LinearMap(n_spring, nf) do f_spring, f_body
-        # TODO: Integrate normal force on membrane and apply to top spring
-        error("implement")
+        fx, fy = eachcol(reshape(f_body, nb, 2))
+        ux, uy = body.spring_normal
+
+        f_spring .= 0
+        f_spring[end] = sum(1:nb) do i
+            fx[i] * ux + fy[i] * uy
+        end
+
+        return f_spring
     end
 
     return SpringedMembraneOps(M, K, spring_to_fluid_offset, fluid_to_spring_force)
@@ -233,8 +241,24 @@ end
 function init!(
     ops::SpringedMembraneOps, body::SpringedMembrane, ::PanelView, ::DeformationStateView
 )
-    # TODO: Initialize ops.M and ops.K
-    error("implement")
+    n = length(body.m)
+
+    ops.M .= 0
+    for i in 1:n
+        ops.M[i, i] = body.m[i]
+    end
+
+    Kt = diagm(body.k)
+
+    A = zeros(n, n)
+    A[1, 1] = 1
+    for i in 2:n
+        A[i, i] = 1
+        A[i, i - 1] = -1
+    end
+
+    ops.K .= transpose(A) * Kt * A
+
     return nothing
 end
 

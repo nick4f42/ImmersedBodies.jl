@@ -277,12 +277,14 @@ struct SpringedMembrane <: DeformingBody
     ds0::Vector{Float64} # Lengths at each membrane reference position
     normals::Matrix{Float64} # Normals at each point in membrane
     deform_weights::Matrix{Float64} # Weights for deforming membrane
-    n_spring::Int
+    spring_normal::SVector{2,Float64} # Direction that the spring can respond in
+    m::Vector{Float64}
+    k::Vector{Float64}
 end
 
 reference_pos(body::SpringedMembrane) = body.xref
 
-n_variables(body::SpringedMembrane) = body.n_spring
+n_variables(body::SpringedMembrane) = length(body.m)
 
 initial_pos!(xb, body::SpringedMembrane) = xb .= body.xref
 initial_lengths!(ds, body::SpringedMembrane) = ds .= body.ds0
@@ -298,7 +300,6 @@ function SpringedMembrane(
     nb = size(xref, 1)
 
     @assert axes(m) == axes(k)
-    n_spring = length(m)
 
     s = cumsum(ds0)
 
@@ -332,18 +333,21 @@ function SpringedMembrane(
         normals[i, :] .= normal(i - 1, i + 1)
     end
 
+    # Take the normal at the middle point to be the spring direction
+    spring_normal = SVector{2}(@view normals[end ÷ 2, :])
+
     deform_weights = zeros(nb, 2)
     for i in 1:nb
         nx, ny = @view normals[i, :]
-
-        # TODO: Set deformation weights based on normal and r[i]
-        # deform_weights[i, 1] =
-        # deform_weights[i, 2] =
+        weight = membrane_distribution(r[i])
+        deform_weights[i, 1] = nx * weight
+        deform_weights[i, 2] = ny * weight
     end
-    error("implement")
 
-    return SpringedMembrane(xref, ds0, normals, deform_weights, n_spring)
+    return SpringedMembrane(xref, ds0, normals, deform_weights, spring_normal, m, k)
 end
+
+membrane_distribution(x) = exp(-(3x)^2 / 2)
 
 function diatomic_phononic_material(
     segments::Segments; n_cell::Int, m::NTuple{2,Float64}, k::NTuple{2,Float64}, kw...
@@ -353,8 +357,15 @@ function diatomic_phononic_material(
     mvec = Vector{Float64}(undef, n_spring)
     kvec = Vector{Float64}(undef, n_spring)
 
-    # TODO: Set mvec and kvec using (m1, m2) and (k1, k2)
-    error("implement")
+    m1, m2 = m
+    k1, k2 = k
+    for i1 in 1:2:n_spring
+        i2 = i1 + 1
+        mvec[i1] = m1
+        mvec[i2] = m2
+        kvec[i1] = k1
+        kvec[i2] = k2
+    end
 
     return SpringedMembrane(segments; m=mvec, k=kvec, kw...)
 end
