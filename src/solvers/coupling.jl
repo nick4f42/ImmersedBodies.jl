@@ -335,9 +335,9 @@ struct DeformingSurfaceCoupler{
 end
 
 function DeformingSurfaceCoupler(; prob, state, qtot, qtmp, reg, E, B)
-    ops = StackedStructureOps(prob)
     panels = bodypanels(state)
 
+    ops = StackedStructureOps(prob, panels)
     init!(ops, prob.bodies, panels, state.qty.deform)
 
     redist = RedistributionWeights(; E, qtmp)

@@ -11,8 +11,11 @@ Base.@kwdef mutable struct StackedStructureOps{O<:StructureOps,T1,T2,T3,T4}
     dt::Float64 # timestep of the problem
 end
 
-function StackedStructureOps(prob::Problem)
-    ops = map(structure_ops, deforming(prob.bodies))
+function StackedStructureOps(prob::Problem, panels::Panels)
+    ops = [
+        structure_ops(prob.bodies[i_body], panels.perbody[i_body]) for
+        (; i_body) in prob.bodies.deforming
+    ]
 
     Ms = Iterators.map(linearmap ∘ mass_matrix, ops)
     Ks = Iterators.map(linearmap ∘ stiff_matrix, ops)
@@ -95,7 +98,7 @@ function fluid_to_structure_force(ops::EulerBernoulliOps)
     return ops.Q * ops.fluid_to_struct
 end
 
-function structure_ops(body::EulerBernoulliBeam{LinearModel})
+function structure_ops(body::EulerBernoulliBeam{LinearModel}, ::PanelView)
     nb = npanels(body)
 
     n = 2 * nb
@@ -210,7 +213,7 @@ stiff_matrix(ops::SpringedMembraneOps) = ops.K
 structure_to_fluid_offset(ops::SpringedMembraneOps) = ops.spring_to_fluid_offset
 fluid_to_structure_force(ops::SpringedMembraneOps) = ops.fluid_to_spring_force
 
-function structure_ops(body::SpringedMembrane)
+function structure_ops(body::SpringedMembrane, panels::PanelView)
     n_spring = length(body.m)
     nb = npanels(body)
     nf = 2 * nb
@@ -229,7 +232,7 @@ function structure_ops(body::SpringedMembrane)
 
         f_spring .= 0
         f_spring[end] = sum(1:nb) do i
-            fx[i] * ux + fy[i] * uy
+            (fx[i] * ux + fy[i] * uy) * panels.len[i]
         end
 
         return f_spring
