@@ -73,6 +73,42 @@ using Test
         @test curve2(0.3) ≈ transform(curve(0.3))
         @test curve2(0.6) ≈ transform(curve(0.6))
     end
+
+    @test_throws "only contain digits" NacaParams("hi")
+    @test_throws "airfoil not implemented" NacaParams("001")
+
+    let
+        params = NacaParams("3412")
+        @test params isa Curves.NACA4
+
+        (; m, p, t) = params
+        @test m ≈ 0.03
+        @test p ≈ 0.40
+        @test t ≈ 0.12
+
+        @test isclosed(NACA(params))
+    end
+
+    let
+        airfoil = Curves.naca"2412"
+
+        s_le = Curves.leading_edge(airfoil)
+        s_te = Curves.trailing_edge(airfoil)
+
+        @test airfoil(s_le) ≈ [0, 0] atol = 1e-8
+        @test airfoil(s_te) ≈ [1, 0] atol = 1e-8
+
+        n = 50
+        segments = partition(airfoil, n)
+        arclen = arclength(airfoil)
+
+        @test all(≈(arclen / n; rtol=0.1), segments.lengths)
+
+        let i1 = 1 + floor(Int, n * s_le), i2 = i1 + 1
+            # Airfoil y coordinate swaps sign at leading edge
+            @test sign(segments.points[i1, 2]) != sign(segments.points[i2, 2])
+        end
+    end
 end
 
 end # module

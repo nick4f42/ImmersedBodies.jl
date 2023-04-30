@@ -4,6 +4,7 @@ export Curve, ClosedCurve, OpenCurve, Segments
 export isclosed, arclength, partition
 export TransformedCurve, Transformation, translate, rotate, scale
 export LineSegment, Circle, ParameterizedCurve
+export NacaParams, NACA, NACA4
 
 using StaticArrays
 using Interpolations
@@ -223,9 +224,10 @@ A curve defined by the points `(x, y) = f(t)` for `0 ≤ t ≤ 1`.
 
 `n_sample` points are used to determine an equal spacing when partitioning the curve.
 """
-struct ParameterizedCurve{F,P} <: Curve
+struct ParameterizedCurve{F,P1,P2} <: Curve
     f::F # parameter -> point
-    param::P # equally spaced arclength -> parameter
+    param::P1 # normalized arclength -> parameter
+    inv_param::P2 # parameter -> normalized arclength
     arclen::Float64
     closed::Bool # whether f(0) ≈ f(1)
     function ParameterizedCurve(f; n_sample=100)
@@ -238,11 +240,16 @@ struct ParameterizedCurve{F,P} <: Curve
 
         s_sample ./= arclen # Normalize to [0, 1]
 
+        inv_param = let s = interpolate(s_sample, BSpline(Linear()))
+            Interpolations.scale(s, t_sample)
+        end
         param = interpolate((s_sample,), t_sample, Gridded(Linear()))
 
         closed = norm(fv(1) - fv(0)) / arclen < 1e-8
 
-        return new{typeof(fv),typeof(param)}(fv, param, arclen, closed)
+        return let F = typeof(fv), P1 = typeof(param), P2 = typeof(inv_param)
+            return new{F,P1,P2}(fv, param, inv_param, arclen, closed)
+        end
     end
 end
 
@@ -310,6 +317,89 @@ function point_array_lengths!(lengths, points, closed::Bool)
     end
 
     return lengths
+end
+
+abstract type NacaParams end
+
+function NacaParams(spec::AbstractString)
+    if !all(isdigit, spec)
+        throw(ArgumentError("NACA specification must only contain digits"))
+    end
+
+    n = length(spec)
+    return if n == 4
+        NACA4(spec)
+    else
+        throw(ArgumentError("$n-digit NACA airfoil not implemented"))
+    end
+end
+
+macro naca_str(spec::AbstractString)
+    params = NacaParams(spec)
+    return :(NACA($params))
+end
+
+struct NACA{N<:NacaParams,C<:ParameterizedCurve} <: ClosedCurve
+    params::N
+    curve::C
+    leading_edge::Float64 # Parameter of leading edge
+    function NACA(params::NacaParams)
+        curve = ParameterizedCurve(s -> _point(params, s))
+        leading_edge = curve.inv_param(0.5)
+        return new{typeof(params),typeof(curve)}(params, curve, leading_edge)
+    end
+end
+
+(curve::NACA)(s) = curve.curve(s)
+arclength(curve::NACA) = arclength(curve.curve)
+partition(curve::NACA, n::Integer) = partition(curve.curve, n)
+
+leading_edge(airfoil::NACA) = airfoil.leading_edge
+trailing_edge(airfoil::NACA) = 0.0
+
+struct NACA4 <: NacaParams
+    m::Float64 # Max camber
+    p::Float64 # Location of max camber along chord
+    t::Float64 # Max thickness
+end
+
+function NACA4(spec::AbstractString)
+    @assert all(isdigit, spec)
+    m = parse(Int8, spec[1]) / 100
+    p = parse(Int8, spec[2]) / 10
+    t = parse(Int8, spec[3:4]) / 100
+    return NACA4(m, p, t)
+end
+
+function _point(params::NACA4, s::Real)
+    # Equations from http://airfoiltools.com/airfoil/naca4digit
+    (; m, p, t) = params
+
+    # NACA airfoil constants
+    a0 = 0.2969
+    a1 = -0.126
+    a2 = -0.3516
+    a3 = 0.2843
+    a4 = -0.1036 # closed trailing edge
+
+    β = 2 * π * s
+    x = 0.5 * (1 + cos(β))
+
+    if x < p
+        yc = m / p^2 * (2 * p * x - x^2)
+        dyc = 2 * m / p^2 * (p - x)
+    else
+        yc = m / (1 - p)^2 * (1 - 2 * p + 2 * p * x - x^2)
+        dyc = 2 * m / (1 - p)^2 * (p - x)
+    end
+
+    yt = 5 * t * (a0 * sqrt(x) + a1 * x + a2 * x^2 + a3 * x^3 + a4 * x^4)
+
+    θ = atan(dyc)
+    z = SVector(x, yc)
+    dz = yt * SVector(-sin(θ), cos(θ))
+
+    return s < 0.5 ? z + dz : z - dz
 end
 
 end # module Curves
