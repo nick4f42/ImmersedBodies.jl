@@ -1,8 +1,13 @@
 module Curves
 
-export Curve, Segments, arclength, partition
+export Curve, ClosedCurve, OpenCurve, Segments
+export isclosed, arclength, partition
+export LineSegment, Circle, ParameterizedCurve
 
 using StaticArrays
+using Interpolations
+using FunctionWrappers: FunctionWrapper
+using LinearAlgebra: norm
 
 """
     Curve
@@ -122,6 +127,102 @@ function partition(circle::Circle, n::Integer)
     lengths = fill(ds, n)
 
     return Segments(points, lengths)
+end
+
+"""
+    ParameterizedCurve(f; n_sample=100) :: Curve
+
+A curve defined by the points `(x, y) = f(t)` for `0 ≤ t ≤ 1`.
+
+`n_sample` points are used to determine an equal spacing when partitioning the curve.
+"""
+struct ParameterizedCurve{F,P} <: Curve
+    f::F # parameter -> point
+    param::P # equally spaced arclength -> parameter
+    arclen::Float64
+    closed::Bool # whether f(0) ≈ f(1)
+    function ParameterizedCurve(f; n_sample=100)
+        fv = SVector{2,Float64} ∘ f
+
+        t_sample = range(0, 1, n_sample)
+
+        s_sample = sample_arclengths(fv, t_sample)
+        arclen = s_sample[end]
+
+        s_sample ./= arclen # Normalize to [0, 1]
+
+        param = interpolate((s_sample,), t_sample, Gridded(Linear()))
+
+        closed = norm(fv(1) - fv(0)) / arclen < 1e-8
+
+        return new{typeof(fv),typeof(param)}(fv, param, arclen, closed)
+    end
+end
+
+arclength(curve::ParameterizedCurve) = curve.arclen
+isclosed(curve::ParameterizedCurve) = curve.closed
+(curve::ParameterizedCurve)(t) = curve.f(curve.param(t))
+
+function partition(curve::ParameterizedCurve, n::Integer)
+    points = Matrix{Float64}(undef, n, 2)
+
+    ts = if isclosed(curve)
+        range(0, 1, n + 1)[1:n]
+    else
+        range(0, 1, n)
+    end
+
+    for (i, t) in enumerate(ts)
+        points[i, :] .= curve(t)
+    end
+
+    lengths = point_array_lengths(points, isclosed(curve))
+    return Segments(points, lengths)
+end
+
+function sample_arclengths(f, t)
+    s = similar(t)
+
+    p1 = f(t[1])
+    s[1] = 0
+    for i in eachindex(s)[2:end]
+        p2 = f(t[i])
+        s[i] = s[i - 1] + norm(p2 - p1)
+        p1 = p2
+    end
+
+    return s
+end
+
+function point_array_lengths(points, closed::Bool)
+    lengths = Vector{Float64}(undef, size(points, 1))
+    return point_array_lengths!(lengths, points, closed)
+end
+
+function point_array_lengths!(lengths, points, closed::Bool)
+    n = size(points, 1)
+    @assert n > 1 "cannot determine length with single point"
+
+    len(p, i, j) = norm(SVector{2}(p[i, :]) - SVector{2}(p[j, :]))
+
+    lens = Vector{Float64}(undef, n - 1)
+    for i in eachindex(lens)
+        lens[i] = len(points, i, i + 1)
+    end
+
+    if closed
+        endlen = len(points, n, 1)
+        lengths[1] = (endlen + lens[1]) / 2
+        lengths[n] = (lens[n - 1] + endlen) / 2
+    else
+        lengths[1] = lens[1]
+        lengths[n] = lens[n - 1]
+    end
+    for i in 2:(n - 1)
+        lengths[i] = (lens[i - 1] + lens[i]) / 2
+    end
+
+    return lengths
 end
 
 end # module Curves
