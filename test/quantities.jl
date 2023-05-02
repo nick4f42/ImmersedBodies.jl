@@ -23,6 +23,48 @@ using Plots
             @test length(p.series_list) == size(z, 3) # One heatmap per sublevel
         end
     end
+
+    @testset "values" begin
+        # Use a placeholder state for testing
+        state = 0
+
+        let
+            array = reshape(1:6, 3, 2)
+            f = ArrayQuantity(state -> array)
+            v = f(state)
+
+            @test v == array
+            @test eltype(v) <: Int
+        end
+
+        let
+            coords = (LinRange(0, 1, 2), LinRange(0, 1, 3))
+            array = [1 2 3; 4 5 6]
+            f = GridQuantity(state -> array, coords)
+            v = f(state)
+
+            @test coordinates(f) == coords
+
+            @test v isa GridValue
+            @test eltype(v) <: Int
+            @test v == array
+            @test coordinates(v) == coords
+        end
+
+        let
+            coords = [(LinRange(0, 10i, 2), LinRange(0, 30i, 3)) for i in 1:4]
+            array = reshape(1:(2 * 3 * 4), 2, 3, 4)
+            f = MultiLevelGridQuantity(state -> array, coords)
+            v = f(state)
+
+            @test coordinates(f) == coords
+
+            @test v isa MultiLevelGridValue
+            @test eltype(v) <: Int
+            @test v == array
+            @test coordinates(v) == coords
+        end
+    end
 end
 
 end # module

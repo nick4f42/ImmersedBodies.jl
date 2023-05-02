@@ -66,27 +66,32 @@ end
         ),
     )
 
-    function test_values(a, b, c, d, e)
-        for v in (a, b, c, d, e)
+    function test_values(vals)
+        for v in vals
             @test timevalue(v) ≈ value_times atol = 1e-8
         end
 
-        @test a isa ArrayValues && eltype(a) <: Int
-        @test a == [42 for _ in 1:3]
+        @test vals.a isa ArrayValues
+        @test eltype(vals.a) <: Int
+        @test vals.a == [42 for _ in 1:3]
 
-        @test b isa ArrayValues && eltype(b) <: Int
-        @test b == value_inds
+        @test vals.b isa ArrayValues
+        @test eltype(vals.b) <: Int
+        @test vals.b == value_inds
 
-        @test c isa ArrayValues && eltype(c) <: AbstractArray{Float64}
-        @test c == [[1.0, 2.0] for _ in 1:3]
+        @test vals.c isa ArrayValues
+        @test eltype(vals.c) <: AbstractArray{Float64}
+        @test vals.c == [[1.0, 2.0] for _ in 1:3]
 
-        @test d isa GridValues && eltype(d) <: AbstractArray{Int}
-        @test d == [[1 2; 3 4] for _ in 1:3]
-        @test coordinates(d) == (LinRange(0, 1, 2), LinRange(0, 1, 2))
+        @test vals.d isa GridValues
+        @test eltype(vals.d) <: AbstractArray{Int}
+        @test vals.d == [[1 2; 3 4] for _ in 1:3]
+        @test coordinates(vals.d) == (LinRange(0, 1, 2), LinRange(0, 1, 2))
 
-        @test e isa MultiLevelGridValues && eltype(e) <: AbstractArray{Float64}
-        @test e == [ones(2, 2, 3) for _ in 1:3]
-        @test coordinates(e) == [(LinRange(0, i, 2), LinRange(0, i, 2)) for i in 1:3]
+        @test vals.e isa MultiLevelGridValues
+        @test eltype(vals.e) <: AbstractArray{Float64}
+        @test vals.e == [ones(2, 2, 3) for _ in 1:3]
+        @test coordinates(vals.e) == [(LinRange(0, i, 2), LinRange(0, i, 2)) for i in 1:3]
     end
 
     fn = tempname()
@@ -103,8 +108,7 @@ end
     end
 
     @testset "return values" begin
-        (; a, b, c, d, e) = soln.vals
-        test_values(a, b, c, d, e)
+        test_values(soln.vals)
     end
 
     @testset "HDF5 saving" begin
@@ -112,17 +116,19 @@ end
             file["not-a-quantity"] = 126.125
             @test_throws AssertionError quantity_values(file["not-a-quantity"])
 
-            vals = file["nested/values"]
-            a, b, c, d, e = (quantity_values(vals[k]) for k in ("a", "b", "c", "d", "e"))
+            group = file["nested/values"]
+            vals = NamedTuple(
+                k => quantity_values(group[string(k)]) for k in keys(value_group.quantities)
+            )
 
             # Ensure indexing a value read from file returns a value in memory
-            @test a[1] isa Int
-            @test b[1] isa Int
-            @test c[1] isa Vector{Float64}
-            @test d[1].array isa Array{Int,2}
-            @test e[1].array isa Array{Float64,3}
+            @test vals.a[1] isa Int
+            @test vals.b[1] isa Int
+            @test vals.c[1] isa Vector{Float64}
+            @test vals.d[1].array isa Array{Int,2}
+            @test vals.e[1].array isa Array{Float64,3}
 
-            test_values(a, b, c, d, e)
+            test_values(vals)
         end
     end
 
