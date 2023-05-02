@@ -64,6 +64,16 @@ using Plots
             @test v == array
             @test coordinates(v) == coords
         end
+
+        let arrays = [[1 2 3; 4 5 6], [7 8; 9 10], [11; 12;;]],
+            f = ConcatArrayQuantity(state -> arrays, 2),
+            v = f(state)
+
+            @test v isa ConcatArrayValue
+            @test eltype(v) <: AbstractMatrix{Int}
+            @test v == arrays
+            @test v.dim == 2
+        end
     end
 end
 

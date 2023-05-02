@@ -38,3 +38,14 @@ function mem_saver_values(saver::QuantityMemSaver{<:MultiLevelGridQuantity})
     arrays = [a for a in saver.values] # convert vector to proper type
     return MultiLevelGridValues(saver.times, arrays, saver.qty.coords)
 end
+
+function update_saver(saver::QuantityMemSaver{<:ConcatArrayQuantity}, state::AbstractState)
+    arrays = saver.qty(state).arrays
+    push!(saver.values, arrays)
+    return nothing
+end
+
+function mem_saver_values(saver::QuantityMemSaver{<:ConcatArrayQuantity})
+    arrays = [a for a in saver.values]
+    return ConcatArrayValues(saver.times, arrays, saver.qty.dim)
+end

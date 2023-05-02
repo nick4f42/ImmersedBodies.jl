@@ -64,6 +64,7 @@ end
         e=MultiLevelGridQuantity(
             state -> ones(2, 2, 3), [(LinRange(0, i, 2), LinRange(0, i, 2)) for i in 1:3]
         ),
+        f=ConcatArrayQuantity(state -> [[1 2 3; 4 5 6], [7 8; 9 10], [11; 12;;]], 2),
     )
 
     function test_values(vals)
@@ -92,6 +93,10 @@ end
         @test eltype(vals.e) <: AbstractArray{Float64}
         @test vals.e == [ones(2, 2, 3) for _ in 1:3]
         @test coordinates(vals.e) == [(LinRange(0, i, 2), LinRange(0, i, 2)) for i in 1:3]
+
+        @test vals.f isa ConcatArrayValues
+        @test eltype(vals.f) <: AbstractVector{<:AbstractMatrix{Int}}
+        @test vals.f == [[[1 2 3; 4 5 6], [7 8; 9 10], [11; 12;;]] for _ in 1:3]
     end
 
     fn = tempname()
@@ -124,6 +129,15 @@ end
         end
 
         test_values(vals)
+
+        let tmp = tempname(),
+            save = ValueGroup(
+                AllTimesteps(); x=ConcatArrayQuantity(state -> [[1 2; 3 5], [5 6]], 2)
+            )
+
+            @test_throws "Cannot concat" solve(tmp, prob, tspan; save=save)
+            rm(tmp; force=true)
+        end
     end
 
     rm(fn)

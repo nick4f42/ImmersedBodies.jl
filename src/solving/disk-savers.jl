@@ -1,6 +1,8 @@
 const QUANTITY_TYPE_ATTR = "quantity_type"
 const TIME_ATTR = "time"
 const COORDS_ATTR = "coords"
+const CONCAT_DIM_ATTR = "concat_dimension"
+const CONCAT_CUMSUM_ATTR = "concat_index_cumsum"
 
 abstract type QuantityDiskSaver end
 
@@ -103,4 +105,83 @@ function quantity_values(::Val{nameof(MultiLevelGridQuantity)}, dset::HDF5.Datas
     coord_array = map(from_range_tuple, read_attribute(dset, COORDS_ATTR))
     coords = reinterpret(reshape, NTuple{ndims(dset) - 2,eltype(coord_array)}, coord_array)
     return MultiLevelGridValues(time, arrays, coords)
+end
+
+struct ConcatArrayDiskSaver <: QuantityDiskSaver
+    dset::HDF5.Dataset
+    dim::Int
+    inds::Vector{UnitRange{Int}}
+end
+
+function create_disk_saver(
+    parent, name, qty::ConcatArrayQuantity, timeref::HDF5.Reference, value
+)
+    maxlen = length(parent[timeref])
+    dtype = datatype(first(value))
+
+    s = size(first(value))
+    for v in value
+        if !_concat_dim_ok(s, size(v), qty.dim)
+            error(
+                "Cannot concat arrays with sizes $s and $(size(v)) along dimension $(qty.dim)",
+            )
+        end
+    end
+
+    # Length of each slice
+    dimlens = Iterators.map(v -> size(v, qty.dim), value)
+
+    # Indices of each slice
+    inds = accumulate((r, n) -> last(r) .+ (1:n), dimlens; init=0:0)
+
+    # Total length of concatenated slices
+    dimlen = sum(dimlens)
+
+    space = (s[1:(qty.dim - 1)]..., dimlen, s[(qty.dim + 1):end]..., maxlen)
+
+    dset = create_dataset(parent, name, dtype, space)
+    attributes(dset)[QUANTITY_TYPE_ATTR] = string(nameof(ConcatArrayQuantity))
+    attributes(dset)[TIME_ATTR] = timeref
+    attributes(dset)[CONCAT_DIM_ATTR] = qty.dim
+    attributes(dset)[CONCAT_CUMSUM_ATTR] = map(last, inds)
+
+    return ConcatArrayDiskSaver(dset, qty.dim, inds)
+end
+
+_concat_dim_ok(s1::NTuple{N1}, s2::NTuple{N2}, dim::Int) where {N1,N2} = false
+function _concat_dim_ok(s1::NTuple{N}, s2::NTuple{N}, dim::Int) where {N}
+    return all(i -> i == dim || s1[i] == s2[i], 1:N)
+end
+
+function update_saver(saver::ConcatArrayDiskSaver, timeindex::Int, value)
+    i1 = (Colon() for _ in 1:(saver.dim - 1))
+    i2 = (Colon() for _ in (saver.dim + 1):(ndims(saver.dset) - 1))
+
+    for (i, v) in zip(saver.inds, value)
+        saver.dset[i1..., i, i2..., timeindex] = v
+    end
+
+    return nothing
+end
+
+function quantity_values(::Val{nameof(ConcatArrayQuantity)}, dset::HDF5.Dataset)
+    time = read(dset[read_attribute(dset, TIME_ATTR)])
+    dim = read_attribute(dset, CONCAT_DIM_ATTR)
+    inds = read_attribute(dset, CONCAT_CUMSUM_ATTR)
+
+    data = read(dset)
+
+    i1 = (Colon() for _ in 1:(dim - 1))
+    i2 = (Colon() for _ in (dim + 1):(ndims(data) - 1))
+
+    timeaxis = axes(data, ndims(data))
+    arrays = map(timeaxis) do itime
+        map(eachindex(inds)) do i
+            r1 = i == 1 ? 1 : inds[i - 1] + 1
+            r2 = inds[i]
+            @view data[i1..., r1:r2, i2..., itime]
+        end
+    end
+
+    return ConcatArrayValues(time, arrays, dim)
 end

@@ -99,3 +99,34 @@ function Base.getindex(vals::MultiLevelGridValues, i)
 end
 timevalue(vals::MultiLevelGridValues) = vals.times
 coordinates(val::MultiLevelGridValues) = val.coords
+
+struct ConcatArrayQuantity{F} <: Quantity
+    f::F
+    dim::Int
+end
+
+struct ConcatArrayValue{A<:AbstractArray} <: AbstractVector{A}
+    arrays::Vector{A}
+    dim::Int
+end
+
+Base.size(val::ConcatArrayValue) = size(val.arrays)
+Base.getindex(val::ConcatArrayValue, i) = val.arrays[i]
+
+(qty::ConcatArrayQuantity)(state) = ConcatArrayValue(qty.f(state), qty.dim)
+
+struct ConcatArrayValues{S,X,V<:ConcatArrayValue} <: AbstractVector{V}
+    times::S
+    values::X
+    dim::Int
+    function ConcatArrayValues(
+        times::S, values::X, dim::Int
+    ) where {S,T,X<:AbstractVector{<:AbstractVector{T}}}
+        V = ConcatArrayValue{T}
+        return new{S,X,V}(times, values, dim)
+    end
+end
+
+Base.size(vals::ConcatArrayValues) = size(vals.values)
+Base.getindex(vals::ConcatArrayValues, i) = ConcatArrayValue(vals.values[i], vals.dim)
+timevalue(vals::ConcatArrayValues) = vals.times
