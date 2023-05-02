@@ -112,24 +112,18 @@ end
     end
 
     @testset "HDF5 saving" begin
-        h5open(fn, "r+") do file
+        vals = h5open(fn, "r+") do file
             file["not-a-quantity"] = 126.125
             @test_throws AssertionError quantity_values(file["not-a-quantity"])
 
             group = file["nested/values"]
-            vals = NamedTuple(
-                k => quantity_values(group[string(k)]) for k in keys(value_group.quantities)
+            return NamedTuple(
+                k => quantity_values(group[string(k)]) for
+                k in keys(value_group.quantities)
             )
-
-            # Ensure indexing a value read from file returns a value in memory
-            @test vals.a[1] isa Int
-            @test vals.b[1] isa Int
-            @test vals.c[1] isa Vector{Float64}
-            @test vals.d[1].array isa Array{Int,2}
-            @test vals.e[1].array isa Array{Float64,3}
-
-            test_values(vals)
         end
+
+        test_values(vals)
     end
 
     rm(fn)
