@@ -105,7 +105,7 @@ struct ConcatArrayQuantity{F} <: Quantity
     dim::Int
 end
 
-struct ConcatArrayValue{A<:AbstractArray} <: AbstractVector{A}
+struct ConcatArrayValue{A<:NumberOrArray} <: AbstractVector{A}
     arrays::Vector{A}
     dim::Int
 end
@@ -143,7 +143,7 @@ end
 
 bodyindices(qty::BodyArrayQuantity) = qty.bodies
 
-struct BodyArrayValue{A<:AbstractArray} <: AbstractVector{A}
+struct BodyArrayValue{A<:NumberOrArray} <: AbstractVector{A}
     arrays::Vector{A}
     dim::Int
     bodies::Vector{Int}

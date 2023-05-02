@@ -75,6 +75,13 @@ using Plots
             @test v.dim == 2
         end
 
+        let array = [1, 2, 5], f = ConcatArrayQuantity(state -> array, 1), v = f(state)
+            @test v isa ConcatArrayValue
+            @test eltype(v) <: Int
+            @test v == array
+            @test v.dim == 1
+        end
+
         let bodies = 2:4,
             arrays = [[1.0 2.0], [3.0 4.0; 5.0 6.0], [7.0 8.0]],
             f = BodyArrayQuantity(state -> arrays, 1, bodies),
@@ -84,6 +91,19 @@ using Plots
 
             @test v isa BodyArrayValue
             @test v == arrays
+            @test v.dim == 1
+            @test bodyindices(v) == bodies
+        end
+
+        let bodies = [1, 3, 4],
+            array = [0.1, 0.3, 0.4],
+            f = BodyArrayQuantity(state -> array, 1, bodies),
+            v = f(state)
+
+            @test bodyindices(f) == bodies
+
+            @test v isa BodyArrayValue
+            @test v == array
             @test v.dim == 1
             @test bodyindices(v) == bodies
         end
