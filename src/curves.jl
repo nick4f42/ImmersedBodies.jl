@@ -71,6 +71,36 @@ points(s::Segments) = s.points
 lengths(s::Segments) = s.lengths
 
 """
+    SplitSegments <: AbstractSegments
+
+Segments created when [`partition`](@ref)ing a [`SplitCurve`](@ref). To retrieve the
+individual parts, see [`parts`](@ref).
+"""
+struct SplitSegments{N} <: AbstractSegments
+    points::Matrix{Float64}
+    lengths::Vector{Float64}
+    splits::NTuple{N,UnitRange{Int}}
+    function SplitSegments(points, lengths, splits::NTuple{N}) where {N}
+        @assert axes(points, 1) == eachindex(lengths)
+        return new{N}(points, lengths, splits)
+    end
+end
+
+points(s::SplitSegments) = s.points
+lengths(s::SplitSegments) = s.lengths
+
+"""
+    separate(segments::SplitSegments)
+
+Returns a tuple of [`Segments`](@ref) for each split part.
+"""
+function separate(s::SplitSegments)
+    return map(s.splits) do r
+        Segments(s.points[r, :], s.lengths[r])
+    end
+end
+
+"""
     arclength(curve::Curve)
 
 The total arclength of a curve.
@@ -215,6 +245,39 @@ function partition(line::LineSegment, n::Integer)
 
     return Segments(points, lengths)
 end
+
+struct SplitCurve{C<:Curve,N} <: Curve
+    base::C
+    splits::NTuple{N,LineSegment}
+end
+
+isclosed(curve::SplitCurve) = isclosed(curve.base)
+arclength(curve::SplitCurve) = arclength(curve.base)
+
+function partition(curve::SplitCurve, n::Integer)
+    segments = partition(curve.base, n)
+    if segments isa SplitSegments
+        # TODO: Throw more useful error, or handle this case in a better way
+        # If you split a curve twice, it's not clear which new split should correspond to
+        # which part
+        error("Cannot split curve twice")
+    end
+
+    points = Curves.points(segments)
+    lengths = Curves.lengths(segments)
+    ranges = cut_indices(points, curve.splits)
+    return SplitSegments(points, lengths, ranges)
+end
+
+"""
+    separate(curve::Curve, cut_at) :: SplitCurve
+    separate(cut_at)(curve::Curve) :: SplitCurve
+
+Mark cuts in `curve` such that a [`SplitSegments`](@ref) is returned when calling
+[`partition`](@ref). `cut_at` is a tuple of [`LineSegment`](@ref)s that cut the curve.
+"""
+separate(curve::Curve, cut_at::Tuple{Vararg{LineSegment}}) = SplitCurve(curve, cut_at)
+separate(cut_at::Tuple{Vararg{LineSegment}}) = curve::Curve -> SplitCurve(curve, cut_at)
 
 """
     separate(segments::Segments, cut_at::Tuple{Vararg{LineSegment}})

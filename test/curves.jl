@@ -113,6 +113,41 @@ using Test
     @test_throws "airfoil not implemented" NacaParams("001")
 
     let
+        curve = Circle()
+        cuts = (LineSegment((0, 0), (-2, 0)),)
+        separated = Curves.separate(curve, cuts)
+
+        segments = partition(separated, 7)
+        @test segments isa Curves.SplitSegments
+
+        parts = Curves.separate(segments)
+
+        θ = range(0, 2π, 8)
+        let θ = θ[1:4]
+            @test Curves.points(parts[1]) ≈ [cos.(θ) sin.(θ)]
+        end
+        let θ = θ[5:7]
+            @test Curves.points(parts[2]) ≈ [cos.(θ) sin.(θ)]
+        end
+    end
+
+    let
+        curve = LineSegment((-0.5, 0.0), (0.5, 0.0))
+
+        cuts = (LineSegment((1.0, 0.5), (1.0, -0.5)),)
+        separated =
+            curve |> translate((1, 0)) |> Curves.separate(cuts) |> translate((-1, 0))
+
+        segments = partition(separated, 8)
+        @test segments isa Curves.SplitSegments
+
+        points = Curves.points(segments)
+        parts = Curves.separate(segments)
+        @test points[1:4, :] == Curves.points(parts[1])
+        @test points[5:8, :] == Curves.points(parts[2])
+    end
+
+    let
         params = NacaParams("3412")
         @test params isa Curves.NACA4
 
