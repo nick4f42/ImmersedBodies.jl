@@ -9,7 +9,7 @@ export NacaParams, NACA, NACA4
 using StaticArrays
 using Interpolations
 using FunctionWrappers: FunctionWrapper
-using LinearAlgebra: norm, I
+using LinearAlgebra: dot, normalize, norm, I
 
 """
     Curve
@@ -176,6 +176,76 @@ function partition(line::LineSegment, n::Integer)
     lengths = fill(ds, n)
 
     return Segments(points, lengths)
+end
+
+"""
+    separate(segments::Segments, cut_at::Tuple{Vararg{LineSegment}})
+
+Separate `segments` into a tuple of [`Segments`](@ref). Separated in the same manner as
+[`cut_ indices`](@ref).
+"""
+function separate(segments::Segments, cut_at::Tuple{Vararg{LineSegment}})
+    ranges = cut_indices(segments.points, cut_at)
+    return map(ranges) do r
+        @views Segments(segments.points[r, :], segments.lengths[r])
+    end
+end
+
+"""
+    cut_indices(points::AbstractMatrix, cut_at::Tuple{Vararg{LineSegment}}) -> ranges
+
+Split the indices of points into a tuple of index ranges.
+
+`points` is a matrix interpreted as a sequence of `[x y]` points. The points are split at
+each sequential segment in `cut_at` such that `cut_at[i]` is between `ranges[i]` and
+`ranges[i + 1]`. The range of points at index `i` is `points[ranges[i], :]`.
+"""
+function cut_indices(points::AbstractMatrix, cut_at::NTuple{N,LineSegment}) where {N}
+    ranges = ntuple(_ -> Ref(1:2), N + 1)
+
+    n = size(points, 1)
+    n == 0 && return (1:0,)
+
+    i1 = 1 # Index after last cut
+    i2 = 1 # Current point index
+    for j in eachindex(cut_at)
+        i1 > n && error("Cannot find intersection with cut_at[$j]")
+
+        line = cut_at[j]
+        along, across = let v = line.p2 - line.p1, (x, y) = v
+            (v / dot(v, v), SVector(-y, x))
+        end
+
+        p = @view points[i2, :]
+        d1 = signbit(dot(p - line.p1, across))
+
+        while true
+            i2 += 1
+            if i2 > n
+                error("Cannot find intersection with cut_at[$j]")
+            end
+
+            p = @view points[i2, :]
+            v = p - line.p1
+            d2 = signbit(dot(v, across))
+
+            # Dot product sign with `across` changes means we crossed the line
+            # Dot product with `along` between 0 and 1 means the point is near the segment
+            # If both, we found the intersection
+            if d1 != d2 && 0 ≤ dot(v, along) ≤ 1
+                break
+            end
+            d1 = d2
+        end
+
+        # Separate right before the point that crossed the line segment
+        ranges[j][] = i1:(i2 - 1)
+        i1 = i2
+    end
+
+    ranges[end][] = i1:n
+
+    return map(i -> i[], ranges)
 end
 
 """

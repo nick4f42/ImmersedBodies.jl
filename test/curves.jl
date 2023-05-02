@@ -55,6 +55,41 @@ using Test
     @test scale(3)((5, 10)) ≈ [15, 30]
 
     let
+        t = range(0, 2π, 13)[1:12]
+        points = @. [cos(t) sin(t)]
+
+        cut_at = map((5, 45, 181, -35)) do θ
+            Curves.LineSegment((cosd(θ), sind(θ)), (0, 0))
+        end
+
+        ranges = Curves.cut_indices(points, cut_at)
+        @test ranges == (1:1, 2:2, 3:7, 8:11, 12:12)
+
+        segments = Segments(points, ones(size(points, 1)))
+        parts = Curves.separate(segments, cut_at)
+
+        part_points = reduce(vcat, (part.points for part in parts))
+        @test part_points == segments.points
+
+        part_counts = map(part -> size(part.points, 1), parts)
+        @test part_counts == (1, 1, 5, 4, 1)
+
+        # Cut segments must be in order
+        let cut = (cut_at[2], cut_at[1])
+            # Cuts the 2nd segment, doesn't find the 1st segment
+            @test_throws "Cannot find intersection" Curves.cut_indices(points, cut)
+        end
+        # Cuts the 4th segment, no more points to check the 2nd segment
+        let cut = (cut_at[4], cut_at[2])
+            @test_throws "Cannot find intersection" Curves.cut_indices(points, cut)
+        end
+        # Cut segments must intersect somewhere
+        let cut = (Curves.LineSegment((2.0, 3.0), (2.0, 4.0)),)
+            @test_throws "Cannot find intersection" Curves.cut_indices(points, cut)
+        end
+    end
+
+    let
         line = LineSegment((0, 1), (1, 1)) |> translate((1, 0)) |> rotate(π) |> scale(2)
         @test line(0) ≈ [-2, -2]
         @test line(1) ≈ [-4, -2]
