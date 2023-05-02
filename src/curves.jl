@@ -2,12 +2,13 @@ module Curves
 
 export Curve, ClosedCurve, OpenCurve, Segments
 export isclosed, arclength, partition
+export TransformedCurve, Transformation, translate, rotate, scale
 export LineSegment, Circle, ParameterizedCurve
 
 using StaticArrays
 using Interpolations
 using FunctionWrappers: FunctionWrapper
-using LinearAlgebra: norm
+using LinearAlgebra: norm, I
 
 """
     Curve
@@ -57,6 +58,92 @@ end
 function partition(curve::Curve, n::Integer)
     ds = arclength(curve) / (n - !isclosed(curve))
     return partition(curve, ds)
+end
+
+"""
+    Transformation
+
+A 2-D transformation that is the combination of translation, rotation, and uniform scaling.
+
+Constructed using [`translate`](@ref), [`rotate`](@ref), and [`scale`](@ref).
+"""
+struct Transformation
+    offset::SVector{2,Float64} # Translation vector
+    rotation::SMatrix{2,2,Float64,4} # Rotation matrix
+    scale::Float64 # Uniform scale
+end
+
+(t::Transformation)(v) = t(SVector{2,Float64}(v))
+function (t::Transformation)(v::AbstractVector{<:Real})
+    return t.offset + t.rotation * t.scale * v
+end
+function (t1::Transformation)(t2::Transformation)
+    offset = t1(t2.offset)
+    rotation = t1.rotation * t2.rotation
+    scale = t1.scale * t2.scale
+    return Transformation(offset, rotation, scale)
+end
+
+const I2 = SMatrix{2,2,Float64}(I) # 2x2 identity
+function _rot(θ::Real)
+    c = cos(θ)
+    s = sin(θ)
+    return @SMatrix [c -s; s c]
+end
+
+"""
+    translate(v) :: Transformation
+
+A [`Transformation`](@ref) that translates by vector `v`.
+"""
+translate(v) = Transformation(v, I2, 1)
+
+"""
+    rotate(θ) :: Transformation
+
+A [`Transformation`](@ref) that rotates counter-clockwise by angle `θ`.
+"""
+rotate(θ) = Transformation(zeros(SVector{2}), _rot(θ), 1)
+
+"""
+    scale(k) :: Transformation
+
+A [`Transformation`](@ref) that uniformly scales by factor `k`.
+"""
+scale(k) = Transformation(zeros(SVector{2}), I2, k)
+
+"""
+    TransformedCurve
+
+A curve that is transformed in space. Constructed by passing a [`Curve`](@ref) to a
+[`Transformation`](@ref).
+"""
+struct TransformedCurve{C<:Curve} <: Curve
+    base::C
+    transform::Transformation
+end
+
+"""
+    (t::Transformation)(curve::Curve)
+
+Transform a curve, returning a [`TransformedCurve`](@ref).
+"""
+(t::Transformation)(curve::Curve) = TransformedCurve(curve, t)
+(t::Transformation)(curve::TransformedCurve) = t(curve.transform)(curve.base)
+
+isclosed(curve::TransformedCurve) = isclosed(curve.base)
+arclength(curve::TransformedCurve) = abs(curve.transform.scale) * arclength(curve.base)
+(curve::TransformedCurve)(t) = curve.transform(curve.base(t))
+
+function partition(curve::TransformedCurve, n::Integer)
+    segments = partition(curve.base, n)
+
+    for i in axes(segments.points, 1)
+        segments.points[i, :] = curve.transform(@view segments.points[i, :])
+        segments.lengths[i] *= curve.transform.scale
+    end
+
+    return segments
 end
 
 """
