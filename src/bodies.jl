@@ -82,7 +82,7 @@ initial_lengths!(ds, body::RigidBody) = ds .= body.len
 - `frame::AbstractFrame`: Prescribed motion of the body.
 """
 function RigidBody(segments::Segments, frame=DiscretizationFrame())
-    return RigidBody(segments.points, segments.lengths, frame)
+    return RigidBody(Curves.points(segments), Curves.lengths(segments), frame)
 end
 
 npanels(body::RigidBody) = length(body.len)

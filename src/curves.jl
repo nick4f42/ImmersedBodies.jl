@@ -29,10 +29,46 @@ Return true if the `curve`'s start and end points are equal, false otherwise.
 isclosed(::ClosedCurve) = true
 isclosed(::OpenCurve) = false
 
-struct Segments
+"""
+    AbstractSegments
+
+A sequence of segments with associated [`points`](@ref) and [`lengths`](@ref).
+
+See [`Segments`](@ref).
+"""
+abstract type AbstractSegments end
+
+"""
+    points(::AbstractSegments)
+
+The matrix of `[x y]` points associated with each segment.
+"""
+function points end
+
+"""
+    lengths(::AbstractSegments)
+
+The vector of lengths associated with each segment.
+"""
+function lengths end
+
+"""
+    Segments(points::AbstractMatrix, lengths::AbstractVector) :: AbstractSegments
+
+A sequence of segments where the point `points[i, :]` is associated with length
+`lengths[i]`.
+"""
+struct Segments <: AbstractSegments
     points::Matrix{Float64}
     lengths::Vector{Float64}
+    function Segments(points, lengths)
+        @assert axes(points, 1) == eachindex(lengths)
+        return new(points, lengths)
+    end
 end
+
+points(s::Segments) = s.points
+lengths(s::Segments) = s.lengths
 
 """
     arclength(curve::Curve)
@@ -42,8 +78,8 @@ The total arclength of a curve.
 function arclength end
 
 """
-    partition(curve::Curve, ds::AbstractFloat) :: Segments
-    partition(curve::Curve, n::Integer) :: Segments
+    partition(curve::Curve, ds::AbstractFloat) :: AbstractSegments
+    partition(curve::Curve, n::Integer) :: AbstractSegments
 
 Partition a curve into segments of approximately equal length. Either specify the target
 segment length `ds` or the target segment count `n`. The curve's endpoints are preserved.
@@ -139,9 +175,11 @@ arclength(curve::TransformedCurve) = abs(curve.transform.scale) * arclength(curv
 function partition(curve::TransformedCurve, n::Integer)
     segments = partition(curve.base, n)
 
-    for i in axes(segments.points, 1)
-        segments.points[i, :] = curve.transform(@view segments.points[i, :])
-        segments.lengths[i] *= curve.transform.scale
+    points = Curves.points(segments)
+    lengths = Curves.lengths(segments)
+    for i in eachindex(lengths)
+        points[i, :] = curve.transform(@view points[i, :])
+        lengths[i] *= curve.transform.scale
     end
 
     return segments
@@ -185,9 +223,11 @@ Separate `segments` into a tuple of [`Segments`](@ref). Separated in the same ma
 [`cut_ indices`](@ref).
 """
 function separate(segments::Segments, cut_at::Tuple{Vararg{LineSegment}})
-    ranges = cut_indices(segments.points, cut_at)
+    points = Curves.points(segments)
+    lengths = Curves.lengths(segments)
+    ranges = cut_indices(points, cut_at)
     return map(ranges) do r
-        @views Segments(segments.points[r, :], segments.lengths[r])
+        @views Segments(points[r, :], lengths[r])
     end
 end
 

@@ -29,10 +29,10 @@ using Test
             points[i, :] .= f(t)
         end
 
-        @test segments.points ≈ points rtol = 0.001
+        @test Curves.points(segments) ≈ points rtol = 0.001
 
         ds = 2 * pi / n
-        @test all(isapprox(ds; rtol=0.01), segments.lengths)
+        @test all(isapprox(ds; rtol=0.01), Curves.lengths(segments))
     end
 
     let
@@ -68,10 +68,10 @@ using Test
         segments = Segments(points, ones(size(points, 1)))
         parts = Curves.separate(segments, cut_at)
 
-        part_points = reduce(vcat, (part.points for part in parts))
-        @test part_points == segments.points
+        part_points = reduce(vcat, Iterators.map(Curves.points, parts))
+        @test part_points == Curves.points(segments)
 
-        part_counts = map(part -> size(part.points, 1), parts)
+        part_counts = map(length ∘ Curves.lengths, parts)
         @test part_counts == (1, 1, 5, 4, 1)
 
         # Cut segments must be in order
@@ -94,9 +94,9 @@ using Test
         @test line(0) ≈ [-2, -2]
         @test line(1) ≈ [-4, -2]
 
-        segments = partition(line, 3)
-        @test segments.points[1, :] ≈ [-2, -2]
-        @test segments.points[end, :] ≈ [-4, -2]
+        points = Curves.points(partition(line, 3))
+        @test points[1, :] ≈ [-2, -2]
+        @test points[end, :] ≈ [-4, -2]
     end
 
     for curve in (LineSegment((1, 2), (-5, 3)), Circle())
@@ -135,13 +135,15 @@ using Test
 
         n = 50
         segments = partition(airfoil, n)
+        points = Curves.points(segments)
+        lengths = Curves.lengths(segments)
         arclen = arclength(airfoil)
 
-        @test all(≈(arclen / n; rtol=0.1), segments.lengths)
+        @test all(≈(arclen / n; rtol=0.1), lengths)
 
         let i1 = 1 + floor(Int, n * s_le), i2 = i1 + 1
             # Airfoil y coordinate swaps sign at leading edge
-            @test sign(segments.points[i1, 2]) != sign(segments.points[i2, 2])
+            @test sign(points[i1, 2]) != sign(points[i2, 2])
         end
     end
 end
