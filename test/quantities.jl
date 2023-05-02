@@ -74,6 +74,19 @@ using Plots
             @test v == arrays
             @test v.dim == 2
         end
+
+        let bodies = 2:4,
+            arrays = [[1.0 2.0], [3.0 4.0; 5.0 6.0], [7.0 8.0]],
+            f = BodyArrayQuantity(state -> arrays, 1, bodies),
+            v = f(state)
+
+            @test bodyindices(f) == bodies
+
+            @test v isa BodyArrayValue
+            @test v == arrays
+            @test v.dim == 1
+            @test bodyindices(v) == bodies
+        end
     end
 end
 

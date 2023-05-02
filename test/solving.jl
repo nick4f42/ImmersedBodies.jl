@@ -65,6 +65,7 @@ end
             state -> ones(2, 2, 3), [(LinRange(0, i, 2), LinRange(0, i, 2)) for i in 1:3]
         ),
         f=ConcatArrayQuantity(state -> [[1 2 3; 4 5 6], [7 8; 9 10], [11; 12;;]], 2),
+        g=BodyArrayQuantity(state -> [[1.0 2.0], [3.0 4.0; 5.0 6.0]], 1, [1, 3]),
     )
 
     function test_values(vals)
@@ -97,6 +98,12 @@ end
         @test vals.f isa ConcatArrayValues
         @test eltype(vals.f) <: AbstractVector{<:AbstractMatrix{Int}}
         @test vals.f == [[[1 2 3; 4 5 6], [7 8; 9 10], [11; 12;;]] for _ in 1:3]
+
+        @test vals.g isa BodyArrayValues
+        @test eltype(vals.g) <: AbstractVector{<:AbstractMatrix{Float64}}
+        @test vals.g == [[[1.0 2.0], [3.0 4.0; 5.0 6.0]] for _ in 1:3]
+        @test bodyindices(vals.g) == [1, 3]
+        @test bodyindices(vals.g[1]) == [1, 3]
     end
 
     fn = tempname()

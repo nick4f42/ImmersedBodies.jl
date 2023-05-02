@@ -49,3 +49,14 @@ function mem_saver_values(saver::QuantityMemSaver{<:ConcatArrayQuantity})
     arrays = [a for a in saver.values]
     return ConcatArrayValues(saver.times, arrays, saver.qty.dim)
 end
+
+function update_saver(saver::QuantityMemSaver{<:BodyArrayQuantity}, state::AbstractState)
+    arrays = saver.qty(state).arrays
+    push!(saver.values, arrays)
+    return nothing
+end
+
+function mem_saver_values(saver::QuantityMemSaver{<:BodyArrayQuantity})
+    arrays = [a for a in saver.values]
+    return BodyArrayValues(saver.times, arrays, saver.qty.dim, saver.qty.bodies)
+end

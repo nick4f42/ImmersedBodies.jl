@@ -12,6 +12,7 @@ export GridQuantity, GridValue, GridValues, coordinates
 export ArrayQuantity, ArrayValues
 export MultiLevelGridQuantity, MultiLevelGridValue, MultiLevelGridValues
 export ConcatArrayQuantity, ConcatArrayValue, ConcatArrayValues
+export BodyArrayQuantity, BodyArrayValue, BodyArrayValues, bodyindices
 
 export flow_velocity, streamfunction, vorticity
 export body_point_pos, body_point_vel, body_traction, body_lengths

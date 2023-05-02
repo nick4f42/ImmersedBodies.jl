@@ -130,3 +130,47 @@ end
 Base.size(vals::ConcatArrayValues) = size(vals.values)
 Base.getindex(vals::ConcatArrayValues, i) = ConcatArrayValue(vals.values[i], vals.dim)
 timevalue(vals::ConcatArrayValues) = vals.times
+
+struct BodyArrayQuantity{F} <: Quantity
+    f::F
+    dim::Int # Dimension to concatenate along
+    bodies::Vector{Int} # Corresponding body indices
+end
+
+function BodyArrayQuantity(f, dim::Int, bodies)
+    return BodyArrayQuantity(f, dim, convert(Vector{Int}, bodies))
+end
+
+bodyindices(qty::BodyArrayQuantity) = qty.bodies
+
+struct BodyArrayValue{A<:AbstractArray} <: AbstractVector{A}
+    arrays::Vector{A}
+    dim::Int
+    bodies::Vector{Int}
+end
+
+Base.size(val::BodyArrayValue) = size(val.arrays)
+Base.getindex(val::BodyArrayValue, i) = val.arrays[i]
+bodyindices(val::BodyArrayValue) = val.bodies
+
+(qty::BodyArrayQuantity)(state) = BodyArrayValue(qty.f(state), qty.dim, qty.bodies)
+
+struct BodyArrayValues{S,X,V<:BodyArrayValue} <: AbstractVector{V}
+    times::S
+    values::X
+    dim::Int
+    bodies::Vector{Int}
+    function BodyArrayValues(
+        times::S, values::X, dim::Int, bodies::AbstractVector{Int}
+    ) where {S,T,X<:AbstractVector{<:AbstractVector{T}}}
+        V = BodyArrayValue{T}
+        return new{S,X,V}(times, values, dim, bodies)
+    end
+end
+
+Base.size(vals::BodyArrayValues) = size(vals.values)
+function Base.getindex(vals::BodyArrayValues, i)
+    return BodyArrayValue(vals.values[i], vals.dim, vals.bodies)
+end
+timevalue(vals::BodyArrayValues) = vals.times
+bodyindices(vals::BodyArrayValues) = vals.bodies

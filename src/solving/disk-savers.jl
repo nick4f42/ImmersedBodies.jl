@@ -3,6 +3,7 @@ const TIME_ATTR = "time"
 const COORDS_ATTR = "coords"
 const CONCAT_DIM_ATTR = "concat_dimension"
 const CONCAT_CUMSUM_ATTR = "concat_index_cumsum"
+const BODY_INDEX_ATTR = "body_indices"
 
 abstract type QuantityDiskSaver end
 
@@ -114,7 +115,12 @@ struct ConcatArrayDiskSaver <: QuantityDiskSaver
 end
 
 function create_disk_saver(
-    parent, name, qty::ConcatArrayQuantity, timeref::HDF5.Reference, value
+    parent,
+    name,
+    qty::ConcatArrayQuantity,
+    timeref::HDF5.Reference,
+    value;
+    typename=string(nameof(ConcatArrayQuantity)),
 )
     maxlen = length(parent[timeref])
     dtype = datatype(first(value))
@@ -140,7 +146,7 @@ function create_disk_saver(
     space = (s[1:(qty.dim - 1)]..., dimlen, s[(qty.dim + 1):end]..., maxlen)
 
     dset = create_dataset(parent, name, dtype, space)
-    attributes(dset)[QUANTITY_TYPE_ATTR] = string(nameof(ConcatArrayQuantity))
+    attributes(dset)[QUANTITY_TYPE_ATTR] = typename
     attributes(dset)[TIME_ATTR] = timeref
     attributes(dset)[CONCAT_DIM_ATTR] = qty.dim
     attributes(dset)[CONCAT_CUMSUM_ATTR] = map(last, inds)
@@ -184,4 +190,29 @@ function quantity_values(::Val{nameof(ConcatArrayQuantity)}, dset::HDF5.Dataset)
     end
 
     return ConcatArrayValues(time, arrays, dim)
+end
+
+function create_disk_saver(
+    parent, name, qty::BodyArrayQuantity, timeref::HDF5.Reference, value::BodyArrayValue
+)
+    concat_qty = ConcatArrayQuantity(qty.f, qty.dim)
+    concat_val = ConcatArrayValue(value.arrays, value.dim)
+    saver = create_disk_saver(
+        parent,
+        name,
+        concat_qty,
+        timeref,
+        concat_val;
+        typename=string(nameof(BodyArrayQuantity)),
+    )
+
+    attributes(saver.dset)[BODY_INDEX_ATTR] = qty.bodies
+
+    return saver
+end
+
+function quantity_values(::Val{nameof(BodyArrayQuantity)}, dset::HDF5.Dataset)
+    concat_vals = quantity_values(Val(nameof(ConcatArrayQuantity)), dset)
+    bodies = read_attribute(dset, BODY_INDEX_ATTR)
+    return BodyArrayValues(concat_vals.times, concat_vals.values, concat_vals.dim, bodies)
 end
