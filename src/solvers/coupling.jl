@@ -318,7 +318,7 @@ function (coupler::RigidSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
 end
 
 struct DeformingSurfaceCoupler{
-    P<:Problem,O<:StackedStructureOps,R<:RedistributionWeights,ME,MB,MW,MF,MU
+    P<:Problem,O<:StackedStructureOps,R<:RedistributionWeights,ME,MB,MW,MF,MU,MS
 } <: SurfaceCoupler
     prob::P
     qtot::Vector{Float64}
@@ -330,12 +330,15 @@ struct DeformingSurfaceCoupler{
     W::MW
     filter_deform::MF
     unfilter_deform::MU
+    force_to_traction::MS
     deform_k::DeformationState
 end
 
 function DeformingSurfaceCoupler(; prob, state, qtot, qtmp, reg, E, B)
     ops = StackedStructureOps(prob)
-    init!(ops, prob.bodies, state.qty.panels, state.qty.deform)
+    panels = bodypanels(state)
+
+    init!(ops, prob.bodies, panels, state.qty.deform)
 
     redist = RedistributionWeights(; E, qtmp)
 
@@ -343,17 +346,52 @@ function DeformingSurfaceCoupler(; prob, state, qtot, qtmp, reg, E, B)
     filter_deform = deforming_coord_filter(prob.bodies)
     unfilter_deform = deforming_coord_unfilter(prob.bodies)
 
+    nf = 2 * npanels(panels)
+    h = (gridstep ∘ baselevel ∘ discretized)(prob.fluid)
+    dt = timestep(prob)
+
+    # Un-scales F̃b to be a physical traction
+    force_to_traction = LinearMap(nf) do f_flat, F̃b_flat
+        f = reshape(f_flat, :, 2)
+        F̃b = reshape(F̃b_flat, :, 2)
+        @. f = F̃b * h / (dt * panels.len)
+        return f_flat
+    end
+
     deform_k = similar(state.qty.deform)
 
     return DeformingSurfaceCoupler(
-        prob, qtot, ops, reg, redist, E, B, W, filter_deform, unfilter_deform, deform_k
+        prob,
+        qtot,
+        ops,
+        reg,
+        redist,
+        E,
+        B,
+        W,
+        filter_deform,
+        unfilter_deform,
+        force_to_traction,
+        deform_k,
     )
 end
 
 function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     (; F̃b, q0, panels, deform) = quantities(state)
-    (; prob, qtot, ops, reg, redist, E, B, W, filter_deform, unfilter_deform, deform_k) =
-        coupler
+    (;
+        prob,
+        qtot,
+        ops,
+        reg,
+        redist,
+        E,
+        B,
+        W,
+        filter_deform,
+        unfilter_deform,
+        force_to_traction,
+        deform_k,
+    ) = coupler
     (; M, K, Khat_inv, stru_to_fluid_offset, fluid_to_stru_force) = ops
     # stru_to_fluid_offset: Equivalent of Itilde in previous versions
     # fluid_to_stru_force: Equivalent of Q * Itilde' in pervious versions
@@ -374,8 +412,12 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     ζ_k = deform_k.ζ
     ζdot_k = deform_k.ζdot
 
+    # TODO: Define `W` and `force_to_traction` to only act on the deforming bodies so that
+    # computation is not wasted when filtering the deforming bodies
+
     # References the operations in ops, so these are updated when ops is updated
-    Q_W = fluid_to_stru_force * filter_deform * W * 0.5 / dt # This is QWx in Fortran code
+    # This is QWx in the Fortran code
+    Q_W = fluid_to_stru_force * filter_deform * W * force_to_traction
 
     B2 =
         unfilter_deform *
@@ -384,7 +426,8 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
         fluid_to_stru_force *
         filter_deform *
         W *
-        h / dt^2
+        force_to_traction *
+        2 / dt * h
     Binv = Binv_linearmap(prob, B, B2)
 
     err_fsi = Inf
