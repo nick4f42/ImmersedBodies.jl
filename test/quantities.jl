@@ -122,7 +122,14 @@ using Plots
             Curves.LineSegment((-0.3, 0.0), (0.3, 0.0)),
             Curves.Circle(0.2, (0.0, -0.3)),
         ]
-        bodies = BodyGroup([RigidBody(partition(curve, fluid)) for curve in curves])
+        segments = map(curve -> partition(curve, fluid), curves)
+        bodies = BodyGroup([
+            RigidBody(segments[1]),
+            RigidBody(segments[2]),
+            EulerBernoulliBeam(
+                LinearModel, segments[3], [ClampBC(BodyPointIndex(1))]; m=1.0, kb=1.0
+            ),
+        ])
 
         prob = Problem(fluid, bodies)
 
@@ -194,6 +201,24 @@ using Plots
             @test all(>(0), ds[1])
             @test all(>(0), ds[2])
             @test bodyindices(ds) == 2:3
+        end
+
+        @test_throws "not a deforming body" body_deformation(prob; bodyindex=2)
+        @test_throws "not a deforming body" body_deformation(prob; bodyindex=1:2)
+        @test_throws "Derivative must be" body_deformation(prob; bodyindex=1, deriv=-1)
+        @test_throws "Derivative must be" body_deformation(prob; bodyindex=1, deriv=3)
+
+        let χ = body_deformation(prob; bodyindex=3, deriv=0)(state),
+            χd = body_deformation(prob; bodyindex=3, deriv=1)(state),
+            χdd = body_deformation(prob; bodyindex=3, deriv=2)(state)
+
+            @test size(χ) == size(χd) == size(χdd)
+            @test eltype(χ) <: eltype(χd) <: eltype(χdd) <: Float64
+        end
+
+        let χ = body_deformation(prob; bodyindex=3:3)(state)
+            @test χ isa BodyArrayValue
+            @test bodyindices(χ) == 3:3
         end
     end
 end

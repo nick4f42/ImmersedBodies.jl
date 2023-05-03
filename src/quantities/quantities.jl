@@ -16,6 +16,7 @@ export BodyArrayQuantity, BodyArrayValue, BodyArrayValues, bodyindices
 
 export freestream_velocity, flow_velocity, streamfunction, vorticity
 export body_point_pos, body_point_vel, body_traction, body_lengths
+export body_deformation
 
 """
     Quantity

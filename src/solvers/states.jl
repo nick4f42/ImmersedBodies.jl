@@ -39,6 +39,7 @@ function PsiOmegaGridQuantities(prob::Problem{<:PsiOmegaFluidGrid})
 end
 
 bodypanels(state::PsiOmegaGridState) = quantities(state).panels
+deformation(state::PsiOmegaGridState) = quantities(state).deform
 
 function update_traction!(
     qty::PsiOmegaGridQuantities, prob::Problem{<:PsiOmegaFluidGrid{CNAB}}

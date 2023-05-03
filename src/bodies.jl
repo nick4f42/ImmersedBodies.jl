@@ -7,7 +7,7 @@ import ..ImmersedBodies: _show
 
 using StaticArrays
 
-export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels
+export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
 export DeformingBodyBC, bc_point, ClampBC, PinBC
@@ -285,8 +285,10 @@ struct BodyGroup{B<:AbstractBody} <: AbstractVector{B}
     npanel::Int
     npanel_deform::Int
     deforming::Vector{DeformingBodyIndex}
+    index_to_deform::Dict{Int,Int}
     function BodyGroup(bodies::Vector{B}) where {B<:AbstractBody}
         deforming = DeformingBodyIndex[]
+        index_to_deform = Dict{Int,Int}()
 
         n_panel = 0
         n_panel_deform = 0
@@ -295,13 +297,14 @@ struct BodyGroup{B<:AbstractBody} <: AbstractVector{B}
 
             if body isa DeformingBody
                 push!(deforming, DeformingBodyIndex(i_body, n_panel, n_panel_deform))
+                index_to_deform[i_body] = lastindex(deforming)
                 n_panel_deform += n
             end
 
             n_panel += n
         end
 
-        return new{B}(bodies, n_panel, n_panel_deform, deforming)
+        return new{B}(bodies, n_panel, n_panel_deform, deforming, index_to_deform)
     end
 end
 
@@ -391,6 +394,13 @@ npanels(p::Panels) = length(p.len)
 Return the [`Panels`](@ref) of a state.
 """
 function bodypanels end
+
+"""
+    deformation(state::AbstractState) :: DeformationState
+
+Return the [`DeformationState`](@ref) of a state.
+"""
+function deformation end
 
 function prescribe_motion!(::PanelView, ::AbstractFrame, ::RigidBody, t::Float64)
     # TODO: Implement prescribed for other reference frames
