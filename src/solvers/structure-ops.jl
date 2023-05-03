@@ -261,6 +261,7 @@ function init!(
     end
 
     ops.K .= transpose(A) * Kt * A
+    ops.K[diagind(ops.K)] .+= body.kg
 
     return nothing
 end

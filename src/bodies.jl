@@ -280,6 +280,7 @@ struct SpringedMembrane <: DeformingBody
     spring_normal::SVector{2,Float64} # Direction that the spring can respond in
     m::Vector{Float64}
     k::Vector{Float64}
+    kg::Float64 # Grounded spring constant
 end
 
 reference_pos(body::SpringedMembrane) = body.xref
@@ -292,7 +293,8 @@ initial_lengths!(ds, body::SpringedMembrane) = ds .= body.ds0
 npanels(body::SpringedMembrane) = length(body.ds0)
 
 function SpringedMembrane(
-    segments::Segments; m::AbstractVector{Float64}, k::AbstractVector{Float64}, align_normal
+    segments::Segments; m::AbstractVector{Float64}, k::AbstractVector{Float64},
+    kg::Float64=0.0, align_normal
 )
     xref = segments.points
     ds0 = segments.lengths
@@ -344,7 +346,7 @@ function SpringedMembrane(
         deform_weights[i, 2] = ny * weight
     end
 
-    return SpringedMembrane(xref, ds0, normals, deform_weights, spring_normal, m, k)
+    return SpringedMembrane(xref, ds0, normals, deform_weights, spring_normal, m, k, kg)
 end
 
 membrane_distribution(x) = exp(-(3x)^2 / 2)
