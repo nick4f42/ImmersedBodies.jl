@@ -14,7 +14,7 @@ export MultiLevelGridQuantity, MultiLevelGridValue, MultiLevelGridValues
 export ConcatArrayQuantity, ConcatArrayValue, ConcatArrayValues
 export BodyArrayQuantity, BodyArrayValue, BodyArrayValues, bodyindices
 
-export flow_velocity, streamfunction, vorticity
+export freestream_velocity, flow_velocity, streamfunction, vorticity
 export body_point_pos, body_point_vel, body_traction, body_lengths
 
 """

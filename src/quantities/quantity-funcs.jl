@@ -1,3 +1,4 @@
+function freestream_velocity end
 function flow_velocity end
 function streamfunction end
 function vorticity end

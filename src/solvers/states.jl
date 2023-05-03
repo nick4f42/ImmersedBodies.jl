@@ -88,6 +88,10 @@ all_levels(prob::Problem{<:PsiOmegaFluidGrid{CNAB}}) = 1:nlevels(discretized(pro
 grid_quantity(f, coords::AbstractArray{<:Tuple,0}) = GridQuantity(f, coords[])
 grid_quantity(f, coords::AbstractVector{<:Tuple}) = MultiLevelGridQuantity(f, coords)
 
+function Quantities.freestream_velocity(::Problem{<:PsiOmegaFluidGrid})
+    return state::StatePsiOmegaGridCNAB -> quantities(state).u
+end
+
 """
     flow_velocity(direction::Direction, prob::Problem{<:PsiOmegaFluidGrid{CNAB}}; [level])
 
