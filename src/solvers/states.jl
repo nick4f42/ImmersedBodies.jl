@@ -16,6 +16,7 @@ Base.@kwdef struct PsiOmegaGridQuantities
     Γ::Matrix{Float64} # Circulation
     ψ::Matrix{Float64} # Streamfunction
     F̃b::Vector{Float64} # Body forces * dt
+    f_rdst::Vector{Float64} # Redistributed body traction
     panels::Panels # Structural panels
     u::MVector{2,Float64} # [ux, uy] freestream velocity
     deform::DeformationState # State of each deforming body
@@ -32,10 +33,15 @@ function PsiOmegaGridQuantities(prob::Problem{<:PsiOmegaFluidGrid})
     ψ = zeros(nΓ, nlevel)
     panels = Panels(prob.bodies)
     F̃b = zeros(2 * npanels(panels))
+    f_rdst = if prob isa StaticBodyProblem
+        zeros(0)
+    else
+        zeros(size(F̃b))
+    end
     u = zeros(MVector{2,Float64})
     deform = DeformationState(prob.bodies)
 
-    return PsiOmegaGridQuantities(; q, q0, Γ, ψ, F̃b, panels, u, deform)
+    return PsiOmegaGridQuantities(; q, q0, Γ, ψ, F̃b, f_rdst, panels, u, deform)
 end
 
 bodypanels(state::PsiOmegaGridState) = quantities(state).panels
@@ -182,5 +188,26 @@ function Quantities.vorticity(
         Γ_flat = quantities(state).Γ
         Γ = unflatten_circ(Γ_flat, prob.fluid.gridindex, level)
         return @. Γ / h^2
+    end
+end
+
+function Quantities.redistrib_traction(::Problem{<:PsiOmegaFluidGrid}, bodyindex::Integer)
+    return function (state::PsiOmegaGridState)
+        qty = quantities(state)
+        r = qty.panels.indices[bodyindex]
+        return @view reshape(qty.f_rdst, :, 2)[r, :]
+    end
+end
+
+function Quantities.redistrib_traction(
+    prob::Problem{<:PsiOmegaFluidGrid}, bodyindex::AbstractVector
+)
+    return Quantities.BodyArrayQuantity(1, bodyindex) do state::PsiOmegaGridState
+        qty = quantities(state)
+        f_rdst = reshape(qty.f_rdst, :, 2)
+        return map(bodyindex) do i
+            r = qty.panels.indices[i]
+            @view f_rdst[r, :]
+        end
     end
 end

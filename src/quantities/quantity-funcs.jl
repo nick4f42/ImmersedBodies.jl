@@ -7,6 +7,10 @@ function body_point_vel end
 function body_traction end
 function body_lengths end
 
+function redistrib_traction(prob::Problem; bodyindex=1:length(prob.bodies))
+    return redistrib_traction(prob, bodyindex)
+end
+
 for (qty, field) in [
     (:body_point_pos, :pos),
     (:body_point_vel, :vel),

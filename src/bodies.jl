@@ -358,6 +358,7 @@ struct Panels
     vel::Matrix{Float64} # panel velocities
     len::Vector{Float64} # panel lengths
     traction::Matrix{Float64} # traction on each panel
+    indices::Vector{UnitRange{Int}} # index range for each body
     perbody::Vector{PanelView} # panels grouped by body
 end
 
@@ -369,11 +370,13 @@ function Panels(bodies::BodyGroup)
     len = zeros(n)
     traction = zeros(n, 2)
 
+    indices = Vector{UnitRange}(undef, length(bodies))
     perbody = Vector{PanelView}(undef, length(bodies))
     i_panel = 0
     for (i, body) in enumerate(bodies)
         n_panel = npanels(body)
         r = i_panel .+ (1:n_panel)
+        indices[i] = r
         perbody[i] = @views PanelView(i_panel, pos[r, :], vel[r, :], len[r], traction[r, :])
         i_panel += n_panel
     end
@@ -383,7 +386,7 @@ function Panels(bodies::BodyGroup)
         initial_lengths!(panels.len, body)
     end
 
-    return Panels(pos, vel, len, traction, perbody)
+    return Panels(pos, vel, len, traction, indices, perbody)
 end
 
 npanels(p::Panels) = length(p.len)

@@ -377,7 +377,7 @@ function DeformingSurfaceCoupler(; prob, state, qtot, qtmp, reg, E, B)
 end
 
 function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
-    (; F̃b, q0, panels, deform) = quantities(state)
+    (; F̃b, f_rdst, q0, panels, deform) = quantities(state)
     (;
         prob,
         qtot,
@@ -417,8 +417,6 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
 
     # References the operations in ops, so these are updated when ops is updated
     # This is QWx in the Fortran code
-    Q_W = fluid_to_stru_force * filter_deform * W * force_to_traction
-
     B2 =
         unfilter_deform *
         stru_to_fluid_offset *
@@ -467,11 +465,10 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
 
         mul!(F̃b, Binv, rhsf) # Solve for the stresses
 
-        f_kp1 = similar(F̃b) # Redistribute
-        mul!(f_kp1, W, F̃b)
+        # Redistribute
+        mul!(f_rdst, W * force_to_traction, F̃b)
 
-        Δχ1 = similar(r_ζ)
-        mul!(Δχ1, Khat_inv * Q_W, F̃b)
+        Δχ1 = Khat_inv * fluid_to_stru_force * filter_deform * f_rdst
         Δχ = r_ζ + Δχ1
 
         max_χ = maximum(abs, χ_k)

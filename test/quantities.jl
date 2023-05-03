@@ -220,6 +220,15 @@ using Plots
             @test χ isa BodyArrayValue
             @test bodyindices(χ) == 3:3
         end
+
+        let f = redistrib_traction(prob; bodyindex=3)(state)
+            @test f isa AbstractMatrix{Float64}
+        end
+
+        let f = redistrib_traction(prob; bodyindex=3:3)(state)
+            @test f isa BodyArrayValue
+            @test bodyindices(f) == 3:3
+        end
     end
 end
 
