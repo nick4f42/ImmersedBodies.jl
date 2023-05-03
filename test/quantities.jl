@@ -1,5 +1,6 @@
 module TestQuantities
 
+using ImmersedBodies
 using ImmersedBodies.Quantities
 using Test
 using Plots
@@ -106,6 +107,93 @@ using Plots
             @test v == array
             @test v.dim == 1
             @test bodyindices(v) == bodies
+        end
+    end
+
+    @testset "functions" begin
+        flow = FreestreamFlow(t -> (1.0, 0.0); Re=50.0)
+        basegrid = UniformGrid(0.05, (-1.0, 1.0), (-1.0, 1.0))
+        grids = MultiLevelGrid(basegrid, 2)
+
+        fluid = PsiOmegaFluidGrid(flow, grids; scheme=CNAB(0.005))
+
+        curves = [
+            Curves.Circle(0.2, (0.0, 0.3)),
+            Curves.LineSegment((-0.3, 0.0), (0.3, 0.0)),
+            Curves.Circle(0.2, (0.0, -0.3)),
+        ]
+        bodies = BodyGroup([RigidBody(partition(curve, fluid)) for curve in curves])
+
+        prob = Problem(fluid, bodies)
+
+        state = initstate(prob)
+
+        # TODO: Test the contents of the quantity, coordinates, etc
+        # Right now, we just test for type to make sure the right methods are called
+
+        let vx = flow_velocity(XAxis(DiscretizationFrame()), prob)(state)
+            @test vx isa MultiLevelGridValue
+            @test coordinates(vx) isa AbstractVector{<:Tuple}
+        end
+
+        let vy = flow_velocity(YAxis(DiscretizationFrame()), prob)(state)
+            @test vy isa MultiLevelGridValue
+            @test coordinates(vy) isa AbstractVector{<:Tuple}
+        end
+
+        let ψ = streamfunction(prob)(state)
+            @test ψ isa MultiLevelGridValue
+            @test coordinates(ψ) isa AbstractVector{<:Tuple}
+        end
+
+        let ω = vorticity(prob)(state)
+            @test ω isa MultiLevelGridValue
+            @test coordinates(ω) isa AbstractVector{<:Tuple}
+        end
+
+        let xb = body_point_pos(prob; bodyindex=1)(state)
+            @test xb isa AbstractMatrix{Float64}
+
+            y = @view xb[:, 2]
+            @test all(>(0), y)
+        end
+
+        let xb = body_point_pos(prob; bodyindex=2:3)(state)
+            @test xb isa BodyArrayValue
+
+            y = @view xb[2][:, 2]
+            @test all(<(0), y)
+            @test bodyindices(xb) == 2:3
+        end
+
+        let vb = body_point_vel(prob; bodyindex=1)(state)
+            @test vb isa AbstractMatrix{Float64}
+        end
+
+        let vb = body_point_vel(prob; bodyindex=2:3)(state)
+            @test vb isa BodyArrayValue
+            @test bodyindices(vb) == 2:3
+        end
+
+        let f = body_traction(prob; bodyindex=1)(state)
+            @test f isa AbstractMatrix{Float64}
+        end
+
+        let f = body_traction(prob; bodyindex=2:3)(state)
+            @test f isa BodyArrayValue
+            @test bodyindices(f) == 2:3
+        end
+
+        let ds = body_lengths(prob; bodyindex=1)(state)
+            @test ds isa AbstractVector{Float64}
+            @test all(>(0), ds)
+        end
+
+        let ds = body_lengths(prob; bodyindex=2:3)(state)
+            @test ds isa BodyArrayValue
+            @test all(>(0), ds[1])
+            @test all(>(0), ds[2])
+            @test bodyindices(ds) == 2:3
         end
     end
 end

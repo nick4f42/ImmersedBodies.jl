@@ -12,9 +12,18 @@ for (qty, field) in [
     (:body_lengths, :len),
     (:body_traction, :traction),
 ]
-    @eval function $qty(prob::Problem; bodyindex=1:length(prob.bodies))
-        return state -> map(bodyindex) do i
-            bodypanels(state).perbody[i].$field
+    @eval $qty(prob::Problem; bodyindex=1:length(prob.bodies)) = $qty(prob, bodyindex)
+
+    @eval function $qty(::Problem, bodyindex::Integer)
+        return state::AbstractState -> bodypanels(state).perbody[bodyindex].$field
+    end
+
+    @eval function $qty(prob::Problem, bodyindex::AbstractVector)
+        return BodyArrayQuantity(1, bodyindex) do state::AbstractState
+            panels = bodypanels(state)
+            map(bodyindex) do i
+                panels.perbody[i].$field
+            end
         end
     end
 end
