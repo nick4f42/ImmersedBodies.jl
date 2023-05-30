@@ -35,6 +35,34 @@ using Test
         for (bc, (_, i_expect)) in zip(body.bcs, bc_expect)
             @test bc_point(bc).i == i_expect
         end
+
+        let body = diatomic_phononic_material(
+                segments;
+                n_cell=3,
+                m=(1.0, 2.0),
+                k=(3.0, 4.0),
+                kg=(0.2, 0.5),
+                first_spring=false,
+                align_normal=(0.0, 1.0),
+            )
+            @test body.m == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
+            @test body.k == [0.0, 4.0, 3.0, 4.0, 3.0, 4.0]
+            @test body.kg == [0.2, 0.5, 0.2, 0.5, 0.2, 0.5]
+        end
+
+        let body = diatomic_phononic_material(
+                segments;
+                n_cell=3,
+                m=(1.0, 2.0),
+                k=(3.0, 4.0),
+                kg=(0.2, 0.5),
+                first_spring=true,
+                align_normal=(0.0, 1.0),
+            )
+            @test body.m == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
+            @test body.k == [3.0, 4.0, 3.0, 4.0, 3.0, 4.0]
+            @test body.kg == [0.2, 0.5, 0.2, 0.5, 0.2, 0.5]
+        end
     end
 end
 

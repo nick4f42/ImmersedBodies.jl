@@ -280,7 +280,7 @@ struct SpringedMembrane <: DeformingBody
     spring_normal::SVector{2,Float64} # Direction that the spring can respond in
     m::Vector{Float64}
     k::Vector{Float64}
-    kg::Float64 # Grounded spring constant
+    kg::Vector{Float64} # Grounded spring constants
 end
 
 reference_pos(body::SpringedMembrane) = body.xref
@@ -293,8 +293,11 @@ initial_lengths!(ds, body::SpringedMembrane) = ds .= body.ds0
 npanels(body::SpringedMembrane) = length(body.ds0)
 
 function SpringedMembrane(
-    segments::Segments; m::AbstractVector{Float64}, k::AbstractVector{Float64},
-    kg::Float64=0.0, align_normal
+    segments::Segments;
+    m::AbstractVector{Float64},
+    k::AbstractVector{Float64},
+    kg::AbstractVector{Float64},
+    align_normal,
 )
     xref = segments.points
     ds0 = segments.lengths
@@ -352,24 +355,38 @@ end
 membrane_distribution(x) = exp(-(3x)^2 / 2)
 
 function diatomic_phononic_material(
-    segments::Segments; n_cell::Int, m::NTuple{2,Float64}, k::NTuple{2,Float64}, kw...
+    segments::Segments;
+    n_cell::Int,
+    m::NTuple{2,Float64},
+    k::NTuple{2,Float64},
+    kg::NTuple{2,Float64}=(0.0, 0.0),
+    first_spring::Bool,
+    kw...,
 )
     n_spring = 2 * n_cell
 
     mvec = Vector{Float64}(undef, n_spring)
     kvec = Vector{Float64}(undef, n_spring)
+    kgvec = Vector{Float64}(undef, n_spring)
 
     m1, m2 = m
     k1, k2 = k
+    kg1, kg2 = kg
     for i1 in 1:2:n_spring
         i2 = i1 + 1
         mvec[i1] = m1
         mvec[i2] = m2
         kvec[i1] = k1
         kvec[i2] = k2
+        kgvec[i1] = kg1
+        kgvec[i2] = kg2
     end
 
-    return SpringedMembrane(segments; m=mvec, k=kvec, kw...)
+    if !first_spring
+        kvec[1] = 0.0
+    end
+
+    return SpringedMembrane(segments; m=mvec, k=kvec, kg=kgvec, kw...)
 end
 
 struct DeformingBodyIndex

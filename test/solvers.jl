@@ -166,7 +166,7 @@ using Test
         @test max_vel(state) < 20
     end
 
-    @testset "springed membrane body" begin
+    @testset "springed membrane body last_spring=$spring" for spring in false:true
         fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
         curve = Curves.LineSegment((-0.4, 0.3), (0.4, -0.3))
@@ -182,7 +182,8 @@ using Test
 
         m = [1.0, 2.0, 3.0]
         k = [3.0, 2.0, 5.0]
-        compliant_body = SpringedMembrane(compliant; m, k, align_normal=(0.0, 1.0))
+        kg = [0.1, 0.2, 0.3]
+        compliant_body = SpringedMembrane(compliant; m, k, kg, align_normal=(0.0, 1.0))
 
         rigid_body = RigidBody(rigid)
 
