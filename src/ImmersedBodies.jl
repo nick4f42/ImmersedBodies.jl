@@ -22,7 +22,7 @@ export AbstractBody, BodyGroup, RigidBody, npanels, Panels, PanelView
 export SpringedMembrane, diatomic_phononic_material
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export DeformingBody, DeformingBodyBC, bc_point, ClampBC, PinBC
-export StructureModel, LinearModel, EulerBernoulliBeam
+export StructureModel, LinearModel, NonlinearModel, EulerBernoulliBeam
 export Quantities, quantity, coordinates
 
 export Timesteps, TimestepCondition, AllTimesteps, timestep_times, timestep_indices

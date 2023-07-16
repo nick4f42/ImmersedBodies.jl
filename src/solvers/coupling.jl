@@ -392,7 +392,7 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
         force_to_traction,
         deform_k,
     ) = coupler
-    (; M, K, Khat_inv, stru_to_fluid_offset, fluid_to_stru_force) = ops
+    (; M, Khat_inv, stru_to_fluid_offset, fluid_to_stru_force) = ops
     # stru_to_fluid_offset: Equivalent of Itilde in previous versions
     # fluid_to_stru_force: Equivalent of Q * Itilde' in pervious versions
 
@@ -405,18 +405,8 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     # TODO: Add external option for tolerance
     tol_fsi = 1.e-5
 
-    copy!(deform_k, deform)
-
-    (; χ, ζ, ζdot) = deform
-    χ_k = deform_k.χ
-    ζ_k = deform_k.ζ
-    ζdot_k = deform_k.ζdot
-
-    # TODO: Define `W` and `force_to_traction` to only act on the deforming bodies so that
-    # computation is not wasted when filtering the deforming bodies
-
-    # References the operations in ops, so these are updated when ops is updated
-    # This is QWx in the Fortran code
+    # The FORTRAN version uses a h/dt^2 factor, which assumes h/ds=0.5
+    # This version uses the exact h/ds in the force_to_traction operator
     B2 =
         unfilter_deform *
         stru_to_fluid_offset *
@@ -425,14 +415,29 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
         filter_deform *
         W *
         force_to_traction *
-        2 / dt * h
+        2 * h / dt
+
     Binv = Binv_linearmap(prob, B, B2)
 
     err_fsi = Inf
-    while err_fsi > tol_fsi
-        # Update structural operations (matrices) with current deformation
-        update!(ops, prob.bodies, panels, deform_k)
+    it = 1
 
+    update!(ops, BeforeFsiLoop(), prob.bodies, panels, deform)
+
+    QW = fluid_to_stru_force * filter_deform * W * force_to_traction
+    (; χ, ζ, ζdot) = deform
+
+    # Compute consistent acceleration at 1st time step
+    if timeindex(state) == 1
+        mul!(ζdot, M, -ops.Fint + QW * F̃b)
+    end
+
+    copy!(deform_k, deform)
+    χ_k = deform_k.χ
+    ζ_k = deform_k.ζ
+    ζdot_k = deform_k.ζdot
+
+    while true
         # Update the regularization (E matrix) for each deforming body
         for (; i_body) in prob.bodies.deforming
             update!(reg, panels.perbody[i_body], i_body)
@@ -456,9 +461,8 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
         end
 
         r_c = 2 / dt * (χ_k - χ) - ζ
-        r_ζ = M * (ζdot + 4 / dt * ζ + 4 / dt^2 * (χ - χ_k)) - K * χ_k
+        r_ζ = Khat_inv * (M * (ζdot + 4 / dt * ζ + 4 / dt^2 * (χ - χ_k)) - ops.Fint)
 
-        r_ζ = Khat_inv * r_ζ
         F_bg = -h * (2 / dt * r_ζ + r_c)
         F_sm = (unfilter_deform * stru_to_fluid_offset) * F_bg
         rhsf = F_sm + F̃_kp1
@@ -494,6 +498,18 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
 
             mul!(vec(bodypanels.vel), stru2fluid, ζ_k)
         end
+
+        if err_fsi < tol_fsi
+            break
+        end
+
+        if it > 100
+            error("FSI did not converge")
+        end
+
+        update!(ops, BetweenFsiLoops(), prob.bodies, panels, deform_k)
+
+        it += 1
     end
 
     copy!(deform, deform_k)

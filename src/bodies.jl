@@ -15,7 +15,7 @@ export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
 export SpringedMembrane, diatomic_phononic_material
 export DeformingBodyBC, bc_point, ClampBC, PinBC
 export reference_pos, n_variables, deforming
-export StructureModel, LinearModel
+export StructureModel, LinearModel, NonlinearModel
 export DeformationState, DeformationStateView
 
 # typeof(@view matrix[i:j, :])
@@ -156,6 +156,12 @@ Base.@kwdef struct LinearModel <: StructureModel
     kb::Vector{Float64}
 end
 
+Base.@kwdef struct NonlinearModel <: StructureModel
+    m::Vector{Float64}
+    kb::Vector{Float64}
+    ke::Vector{Float64}
+end
+
 abstract type DeformingBodyBC{P<:AbstractBodyPoint} end
 
 # TODO: Only shorten the type name when displaying a value of this type
@@ -189,6 +195,8 @@ end
 bc_point(bc::PinBC) = bc.point
 set_point(::PinBC, p::AbstractBodyPoint) = PinBC(p)
 
+const BCVec = AbstractVector{<:DeformingBodyBC{P} where {P}}
+
 struct EulerBernoulliBeam{M<:StructureModel,B<:DeformingBodyBC{BodyPointIndex}} <:
        DeformingBody
     model::M
@@ -199,27 +207,26 @@ end
 
 reference_pos(body::EulerBernoulliBeam) = body.xref
 
-# 2 displacements per poin
+# 2 displacements per point (x, y)
 n_variables(body::EulerBernoulliBeam{LinearModel}) = 2 * npanels(body)
+
+# 3 displacements per point (x, y, flex angle)
+n_variables(body::EulerBernoulliBeam{NonlinearModel}) = 3 * npanels(body)
 
 initial_pos!(xb, body::EulerBernoulliBeam) = xb .= body.xref
 initial_lengths!(ds, body::EulerBernoulliBeam) = ds .= body.ds0
 
 npanels(body::EulerBernoulliBeam) = length(body.ds0)
 
-function EulerBernoulliBeam(
-    ::Type{LinearModel},
-    segments::Segments,
-    bcs::AbstractVector{<:ClampBC};
-    m::Float64,
-    kb::Float64,
-)
+# TODO: Check whether boundary conditions are valid for given model
+#       The structural model will throw an error when the simulation starts anyway, but it
+#       would be better to throw an error here.
+
+function EulerBernoulliBeam(model::StructureModel, segments::Segments, bcs::BCVec)
     xref = segments.points
     ds0 = segments.lengths
 
-    nel = size(xref, 1) - 1
-    model = LinearModel(; m=fill(m, nel), kb=fill(kb, nel))
-
+    # Get normalized arclength (parameter) along curve
     ts = cumsum(ds0)
     @. ts = (ts - ts[1]) / (ts[end] - ts[1])
 
@@ -228,6 +235,33 @@ function EulerBernoulliBeam(
 
     return EulerBernoulliBeam(model, xref, ds0, bc_indices)
 end
+
+function EulerBernoulliBeam(
+    model::Type{<:StructureModel}, segments::Segments, bcs::BCVec; kw...
+)
+    nb = size(segments.points, 1)
+    model = eb_model(model, nb; kw...)
+    return EulerBernoulliBeam(model, segments, bcs)
+end
+
+function eb_model(::Type{LinearModel}, nb::Int; m, kb)
+    nel = nb - 1
+    return LinearModel(; m=vec_or_full(m, nel), kb=vec_or_full(kb, nel))
+end
+
+function eb_model(::Type{NonlinearModel}, nb::Int; m, kb, ke)
+    nel = nb - 1
+    return NonlinearModel(;
+        m=vec_or_full(m, nel), kb=vec_or_full(kb, nel), ke=vec_or_full(ke, nb)
+    )
+end
+
+function vec_or_full(val::AbstractVector, n::Int)
+    # TODO: Throw a useful error here
+    @assert length(val) == n
+    return val
+end
+vec_or_full(val, n::Int) = fill(val, n)
 
 """
     search_closest(xs, x)

@@ -145,7 +145,9 @@ using Test
         @test max_vel(state) < 20
     end
 
-    @testset "linear deforming body" begin
+    @testset "EulerBernoulliBeam $model" for (model, kw) in (
+        (LinearModel, (m=1.0, kb=1.0)), (NonlinearModel, (m=1.0, kb=1.0, ke=1.0))
+    )
         fluid = PsiOmegaFluidGrid(flow, grids; scheme)
 
         segments1 = partition(Curves.LineSegment((-0.2, 0.5), (0.2, 0.5)), fluid)
@@ -153,7 +155,7 @@ using Test
 
         bcs = map(ClampBC ∘ BodyPointParam, [0.0, 1.0])
         segments2 = partition(Curves.LineSegment((-0.3, -0.5), (0.3, -0.5)), fluid)
-        body2 = EulerBernoulliBeam(LinearModel, segments2, bcs; m=1.0, kb=1.0)
+        body2 = EulerBernoulliBeam(model, segments2, bcs; kw...)
 
         bodies = BodyGroup([body1, body2])
 
