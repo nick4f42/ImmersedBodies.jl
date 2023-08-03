@@ -427,11 +427,6 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
     QW = fluid_to_stru_force * filter_deform * W * force_to_traction
     (; χ, ζ, ζdot) = deform
 
-    # Compute consistent acceleration at 1st time step
-    if timeindex(state) == 1
-        mul!(ζdot, M, -ops.Fint + QW * F̃b)
-    end
-
     copy!(deform_k, deform)
     χ_k = deform_k.χ
     ζ_k = deform_k.ζ
