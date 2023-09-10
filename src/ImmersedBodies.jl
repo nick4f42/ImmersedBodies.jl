@@ -1,55 +1,44 @@
 module ImmersedBodies
 
-using HDF5
+using Base: @kwdef
+using LinearAlgebra
+
+using StaticArrays
 using FunctionWrappers: FunctionWrapper
-using ProgressMeter
+using EllipsisNotation
+using LinearMaps
+using FFTW
+using IterativeSolvers
+using HDF5
 
-export AbstractScheme, CNAB, default_scheme
+export Fluid, CartesianGrid, MultiDomainGrid, MultiDomainExtents, fluid_grid
+export GridPoints, GridVertices, GridU, GridV, GridΓ
+export GridMotion, StaticGrid, MovingGrid, GridVelocity
+export AbstractBody, PresetBody, FsiBody, Bodies, Panels, PanelState
+export any_fsi, n_panels, PanelSection, panel_section, panel_range
+export StaticBody, MovingRigidBody
+export AbstractScheme, default_scheme, CNAB
+export Problem, State
+export solve, solve!, advance!, AbstractSolver, create_solver, CnabSolver
+export save_state, load_state, load_state!
+export Timesteps, TimestepRange, SolutionValues
+export SolutionValue, ArrayValue, MultiDomainValue
+export SolutionSaver, SaveHDF5, fluid_group, body_group
+export Curves
 
-export FluidConditions, FluidDiscretization, AbstractFluid
-export conditions, discretized, gridstep, default_gridstep
-export AbstractState, AbstractSolver, Problem
-export timestep, timevalue, timeindex, discretized, initstate, advance!
+export x_velocity, x_velocity!, y_velocity, y_velocity!
+export vorticity, vorticity!
+export boundary_force, boundary_force!, boundary_pos, boundary_pos!
+export boundary_ds, boundary_ds!, boundary_vel, boundary_vel!
+export boundary_total_force, boundary_total_force!
 
-export AbstractFrame, BaseFrame, GlobalFrame, DiscretizationFrame
-export Direction, XAxis, YAxis
-export OffsetFrame, OffsetFrameInstant
-
-export Curves, Segments, partition
-export AbstractBody, BodyGroup, RigidBody, Panels, PanelView, npanels, bodypanels
-
-export AbstractBody, BodyGroup, RigidBody, npanels, Panels, PanelView
-export Quantities, quantity, coordinates
-
-export Timesteps, TimestepCondition, AllTimesteps, timestep_times, timestep_indices
-export TimestepTimes, TimestepTimeRange, TimestepIndices, TimestepIndexRange
-export Callback, ValueGroup, solve, solve!, timestep_count, quantity_values
-
-export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
-
-_show(io::IO, x) = _show(io, x, "")
-
-include("dynamics.jl")
-using .Dynamics
-
-include("curves.jl")
-using .Curves
-
-include("fluids.jl")
-
+include("problem.jl")
+include("fluid.jl")
+include("coupling.jl")
 include("bodies.jl")
-using .Bodies
+include("io/io.jl")
+include("solver.jl")
+include("curves.jl")
+import .Curves
 
-include("problems.jl")
-
-include("quantities/quantities.jl")
-using .Quantities
-
-include("solving/solving.jl")
-
-include("solvers/solvers.jl")
-using .Solvers
-
-include("plot-recipes.jl")
-
-end # module ImmersedBodies
+end # module
