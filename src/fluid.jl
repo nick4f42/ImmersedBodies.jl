@@ -110,32 +110,33 @@ function rot!(Γ_flat, q, inds::GridIndices)
     Γ_flat
 end
 
-function _dst_plan(inds::GridIndices)
-    b = ones(inds.nx - 1, inds.ny - 1)
-    FFTW.plan_r2r(b, FFTW.RODFT00, [1, 2]; flags=FFTW.EXHAUSTIVE)
+function _dst_plan(b::AbstractMatrix{Float64}; flags, num_threads)
+    FFTW.plan_r2r(b, FFTW.RODFT00, (1, 2); flags, num_threads)
 end
 
-Δinv_operator(inds, dst_plan, lap_eigs) = _lap_inv_operator(inds, dst_plan; Λ=lap_eigs)
+function Δinv_operator(inds, dst_plan, lap_eigs; kw...)
+    _lap_inv_operator(inds, dst_plan; Λ=lap_eigs, kw...)
+end
 
-function A_operator(prob::Problem, dst_plan, lap_eigs::AbstractMatrix; level)
+function A_operator(prob::Problem, dst_plan, lap_eigs::AbstractMatrix; level, kw...)
     fluid = prob.fluid
     (; grid, Re) = fluid
     hc = gridstep(grid, level)
     dt = timestep(prob)
 
     Λexpl = @. inv(1 - lap_eigs * dt / (2 * Re * hc^2))  # Explicit eigenvalues
-    A = _lap_inv_operator(grid.inds, dst_plan; Λ=Λexpl)
+    A = _lap_inv_operator(grid.inds, dst_plan; Λ=Λexpl, kw...)
 
     Λimpl = @. 1 + lap_eigs * dt / (2 * Re * hc^2)  # Implicit eigenvalues
-    Ainv = _lap_inv_operator(grid.inds, dst_plan; Λ=Λimpl)
+    Ainv = _lap_inv_operator(grid.inds, dst_plan; Λ=Λimpl, kw...)
 
     (A, Ainv)
 end
 
-function A_operators(prob::Problem, dst_plan, lap_eigs)
+function A_operators(prob::Problem, dst_plan, lap_eigs; kw...)
     fluid = prob.fluid
     nlevel = fluid.grid.nlevel
-    ops = [A_operator(prob, dst_plan, lap_eigs; level) for level in 1:nlevel]
+    ops = [A_operator(prob, dst_plan, lap_eigs; level, kw...) for level in 1:nlevel]
     A = [A for (A, _) in ops]
     Ainv = [Ainv for (_, Ainv) in ops]
     (A, Ainv)
@@ -145,23 +146,22 @@ function _lap_inv_operator(
     inds::GridIndices,
     dst_plan::FFTW.Plan;
     Λ::AbstractMatrix,
-    work=zeros(inds.nx - 1, inds.ny - 1),
+    Γtmp1::AbstractMatrix,
+    Γtmp2::AbstractMatrix,
 )
     (; nx, ny) = inds
-
-    # To avoid alignment issues with FFTW plan, copy data to/from a working array
-    b_tmp = zeros(nx - 1, ny - 1)
-    x_tmp = zeros(nx - 1, ny - 1)
 
     # Include scale to make forward and inverse transforms equal
     scale = 1 / (4 * nx * ny)
 
     function (x, b)
-        vec(b_tmp) .= b
-        mul!(work, dst_plan, b_tmp)
-        @. work *= scale / Λ
-        mul!(x_tmp, dst_plan, work)
-        x .= vec(x_tmp)
+        # Use temporary arrays to avoid alignment issues with the FFT plan
+        Γtmp1[:] = b
+        mul!(Γtmp2, dst_plan, Γtmp1)
+        @. Γtmp2 *= scale / Λ
+        mul!(Γtmp1, dst_plan, Γtmp2)
+        x[:] = Γtmp1
+        x
     end
 end
 

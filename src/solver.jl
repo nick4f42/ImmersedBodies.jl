@@ -81,7 +81,7 @@ struct CnabSolver{F} <: AbstractSolver
     Γs::Matrix{Float64}  # Trial circulation
     reg::Regularization
     fn::F
-    function CnabSolver(state::State{CNAB}; cg=())
+    function CnabSolver(state::State{CNAB}; fftw=(), cg=())
         prob = state.prob
         grid = prob.fluid.grid
 
@@ -102,10 +102,14 @@ struct CnabSolver{F} <: AbstractSolver
         Γtmp3 = zeros(nΓ)
         qtmp1 = zeros(nq)
         qtmp2 = zeros(nq)
+        Γdst1 = zeros((nx - 1, ny - 1))
+        Γdst2 = zeros((nx - 1, ny - 1))
 
-        dst_plan = _dst_plan(grid.inds)
+        dst_plan = _dst_plan(
+            Γdst1; flags=FFTW.EXHAUSTIVE, num_threads=Threads.nthreads(), fftw...
+        )
         lap_eigs = _lap_eigs(grid.inds)
-        Δinv! = Δinv_operator(grid.inds, dst_plan, lap_eigs)
+        Δinv! = Δinv_operator(grid.inds, dst_plan, lap_eigs; Γtmp1=Γdst1, Γtmp2=Γdst2)
 
         vort2flux! = vort2flux(grid; Δinv!, ψ_bc=Γbc, Γ_tmp=Γtmp1)
         rhs_force! = rhs_force(grid; q_tmp=qtmp1)
@@ -116,7 +120,7 @@ struct CnabSolver{F} <: AbstractSolver
         # Set initial panel state and update reg
         _init_body_motion!(state, reg)
 
-        A, Ainv = A_operators(prob, dst_plan, lap_eigs)
+        A, Ainv = A_operators(prob, dst_plan, lap_eigs; Γtmp1=Γdst1, Γtmp2=Γdst2)
 
         B! = B_operator(
             prob;
