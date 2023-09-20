@@ -7,7 +7,7 @@ end
 
 _update!(::PanelState, ::StaticBody, t) = false
 
-_init!(panels::PanelState, ::MovingRigidBody, t) = false
+_init!(panels::PanelState, ::MovingRigidBody) = false
 
 function _update!(panels::PanelState, body::MovingRigidBody, t)
     motion = body.motion(t)

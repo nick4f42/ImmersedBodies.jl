@@ -246,15 +246,15 @@ at angle `angle`, and rotating at rate `angular_vel`.
 end
 
 """
-    MovingRigidBody(panels::Panels, motion) :: PresetBody
+    MovingRigidBody(motion, panels::Panels) :: PresetBody
 
 A non-deforming body with displacement and rotation over time. With zero displacement and
 zero angle, the body is at `panels`. `motion(t)` is the [`RigidBodyTransform`](@ref) of the
 body at time `t`.
 """
 struct MovingRigidBody <: PresetBody
-    panels::PanelsF64
     motion::FunctionWrapper{RigidBodyTransform,Tuple{Float64}}
+    panels::PanelsF64
 end
 
 n_panels(body::MovingRigidBody) = n_panels(body.panels)

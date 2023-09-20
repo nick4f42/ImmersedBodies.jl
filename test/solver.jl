@@ -27,6 +27,19 @@
                     Panels(fluid.grid, Curves.LineSegment((-0.2, -0.1), (0.2, -0.4)))
                 ),
             ),
+        "moving cyl" =>
+            fluid -> Bodies(;
+                cyl=MovingRigidBody(
+                    Panels(fluid.grid, Curves.Circle(; r=0.5, center=(0.0, 0.0)))
+                ) do t
+                    RigidBodyTransform(;
+                        pos=(0.3 * cos(t), 0.1 * sin(t)),
+                        vel=(-0.3 * sin(t), 0.1 * cos(t)),
+                        angle=0.1 * t,
+                        angular_vel=0.1,
+                    )
+                end,
+            ),
     ]
 
     @testset "solving ($i, $j)" for (i, motion) in motion_choices,

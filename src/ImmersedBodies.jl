@@ -16,7 +16,7 @@ export GridPoints, GridVertices, GridU, GridV, GridΓ
 export GridMotion, StaticGrid, MovingGrid, GridVelocity
 export AbstractBody, PresetBody, FsiBody, Bodies, Panels, PanelState
 export any_fsi, n_panels, PanelSection, panel_section, panel_range
-export StaticBody, MovingRigidBody
+export StaticBody, MovingRigidBody, RigidBodyTransform
 export AbstractScheme, default_scheme, CNAB
 export Problem, State
 export solve, solve!, advance!, AbstractSolver, create_solver, CnabSolver
