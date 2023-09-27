@@ -62,4 +62,19 @@
             @test state.t ≈ 3 * timestep(prob)
         end
     end
+
+    let fluid = Fluid(;
+            grid=fluid_grid(; h=0.1, xlims=(-1.0, 0.5), ylims=(-1.0, 1.0), nlevel=3),
+            Re=20.0,
+            freestream_vel=t -> (1.0, 0.0),
+        ),
+        bodies = Bodies(;
+            cyl=StaticBody(Panels(fluid.grid, Curves.Circle(; r=0.5, center=(0.0, 0.0))))
+        ),
+        scheme = default_scheme(fluid.grid; Umax=2.0, cfl=0.2),
+        prob = Problem(; fluid, bodies, scheme),
+        state = State(prob)
+
+        @test_throws "outside allowed region" create_solver(state)
+    end
 end
