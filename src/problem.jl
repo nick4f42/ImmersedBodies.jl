@@ -536,12 +536,12 @@ end
     Re::Float64
     freestream_vel::TimeFunc{SVector{2,Float64}} = t -> (0.0, 0.0)
     grid_motion::M = StaticGrid()
-    function Fluid(grid, Re, freestream_vel, grid_motion::M) where {M}
+    function Fluid(grid::MultiDomainGrid, Re, freestream_vel, grid_motion::M) where {M}
         new{M}(grid, Re, freestream_vel, grid_motion)
     end
 end
 
-function Fluid(extents::MultiDomainExtents, Re::Float64, args...)
+function Fluid(extents::MultiDomainExtents, Re, args...)
     h = default_gridstep(Re)
 
     (; xlims, ylims, nlevel) = extents
