@@ -333,17 +333,15 @@ end
 
 abstract type NacaParams end
 
-function NacaParams(spec::AbstractString)
+NacaParams(spec::AbstractString) = NacaParams(String(spec))
+function NacaParams(spec::String)
     if !all(isdigit, spec)
         throw(ArgumentError("NACA specification must only contain digits"))
     end
-
-    n = length(spec)
-    if n == 4
-        NACA4(spec)
-    else
-        throw(ArgumentError("$n-digit NACA airfoil not implemented"))
-    end
+    NacaParams(Val(ncodeunits(spec)), spec)
+end
+function NacaParams(::Val{N}, ::String) where {N}
+    throw(ArgumentError("$N-digit NACA airfoil not defined"))
 end
 
 macro naca_str(spec::AbstractString)
@@ -375,7 +373,7 @@ struct NACA4 <: NacaParams
     t::Float64  # Max thickness
 end
 
-function NACA4(spec::AbstractString)
+function NacaParams(::Val{4}, spec::String)
     @assert all(isdigit, spec)
     m = parse(Int8, spec[1]) / 100
     p = parse(Int8, spec[2]) / 10

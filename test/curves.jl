@@ -72,7 +72,7 @@
     end
 
     @test_throws "only contain digits" NacaParams("hi")
-    @test_throws "airfoil not implemented" NacaParams("001")
+    @test_throws "3-digit NACA airfoil" NacaParams("001")
 
     let
         params = NacaParams("3412")
