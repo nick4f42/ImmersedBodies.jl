@@ -345,6 +345,13 @@ function rhs_force(grid::MultiDomainGrid; q_tmp)
         # Call helper function to loop over the arrays and store product in fq
         direct_product!(fq, q_tmp, Γ, Γbc, grid.inds)
 
+        # TODO: Add forcing into these arrays (only when `lev == 1`, i.e. smallest domain):
+        # Forcing must be multiplied by `grid.base.h` to force the flux.
+
+        #fqx, fqy = split_flux(fq, grid.inds)
+        #fqx += grid.base.h * (...)
+        #fqy += grid.base.h * (...)
+
         fq
     end
 end
