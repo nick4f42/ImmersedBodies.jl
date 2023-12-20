@@ -29,17 +29,23 @@ struct UniformGrid <: FluidDiscretization
     h::Float64 # Grid cell size
     xs::LinRange{Float64,Int} # x coordinates
     ys::LinRange{Float64,Int} # y coordinates
-    function UniformGrid(h::Float64, span::Vararg{NTuple{2,Number},2})
-        xs, ys = (x0:h:x1 for (x0, x1) in span)
-        return new(h, xs, ys)
-    end
     function UniformGrid(
         h::Float64, corner::NTuple{2,AbstractFloat}, counts::NTuple{2,Integer}
     )
-        xs, ys = (x0 .+ LinRange(0, h * (n - 1), n) for (x0, n) in zip(corner, counts))
+        # Raise cell count to the next multiple of 4
+        counts4 = 1 .+ cld.(counts .- 1, 4) .* 4
+        xs, ys = (x0 .+ LinRange(0, h * (n - 1), n) for (x0, n) in zip(corner, counts4))
         return new(h, xs, ys)
     end
 end
+
+function UniformGrid(h::Float64, span::Vararg{NTuple{2,AbstractFloat},2})
+    xs, ys = (x0:h:x1 for (x0, x1) in span)
+    corner = map(xspan -> xspan[1], span)
+    counts = map(xspan -> round(Int, (xspan[2] - xspan[1]) / h), span)
+    return UniformGrid(h, corner, counts)
+end
+
 
 # Default to grid Re of 2
 default_gridstep(flow::FreestreamFlow) = 2 / flow.Re
