@@ -457,7 +457,7 @@ lap_inv_linearmap(args...) = lap_inv_linearmap(LaplacianInv(args...))
 function LaplacianInv(gridindex::PsiOmegaGridIndexing)
     Λ = lap_eigs(gridindex)
     b = ones(gridindex.nx - 1, gridindex.ny - 1)
-    dst_plan = FFTW.plan_r2r(b, FFTW.RODFT00, [1, 2]; flags=FFTW.EXHAUSTIVE)
+    dst_plan = FFTW.plan_r2r(b, FFTW.RODFT00, [1, 2]; flags=FFTW.EXHAUSTIVE, num_threads=Threads.nthreads())
 
     return LaplacianInv(gridindex, dst_plan, Λ)
 end
