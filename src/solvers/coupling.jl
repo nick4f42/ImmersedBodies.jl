@@ -476,6 +476,13 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
 
         # Update all structural quantities
         @. χ_k = χ_k + Δχ
+
+        for i in prob.bodies.deforming
+            body = prob.bodies[i.i_body]
+            # FIXME: This will only work with a single deforming body
+            _update_bcs!(χ_k, body, state.t)
+        end
+
         @. ζ_k = -ζ + 2 / dt * (χ_k - χ)
         @. ζdot_k = 4 / dt^2 * (χ_k - χ) - 4 / dt * ζ - ζdot
 

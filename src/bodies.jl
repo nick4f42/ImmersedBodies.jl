@@ -8,12 +8,13 @@ import ..ImmersedBodies: _show
 using LinearAlgebra
 
 using StaticArrays
+using FunctionWrappers: FunctionWrapper
 
 export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
 export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
 export SpringedMembrane, diatomic_phononic_material
-export DeformingBodyBC, bc_point, ClampBC, PinBC
+export DeformingBodyBC, bc_pos, bc_angle, bc_point, ClampBC, PinBC
 export reference_pos, n_variables, deforming
 export StructureModel, LinearModel, NonlinearModel
 export DeformationState, DeformationStateView
@@ -178,8 +179,14 @@ Fixes the position and rotation of a point on a deforming body.
 """
 struct ClampBC{P} <: DeformingBodyBC{P}
     point::P
+    pos::FunctionWrapper{SVector{2,Float64},Tuple{Float64}}
+    angle::FunctionWrapper{Float64,Tuple{Float64}}
 end
 
+ClampBC(p::P, pos, angle) where {P} = ClampBC{P}(p, pos, angle)
+
+bc_pos(bc::ClampBC) = bc.pos
+bc_angle(bc::ClampBC) = bc.angle
 bc_point(bc::ClampBC) = bc.point
 set_point(::ClampBC, p::AbstractBodyPoint) = ClampBC(p)
 

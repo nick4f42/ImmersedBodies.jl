@@ -520,6 +520,28 @@ function _apply_bc!(v::AbstractVector, model::Type{NonlinearModel}, bc::Deformin
     return nothing
 end
 
+function _update_bcs!(
+    χ,
+    body::EulerBernoulliBeam{NonlinearModel},
+    t::Float64
+)
+    for bc in body.bcs
+        _update_bc!(χ, bc, t)
+    end
+end
+
+function _update_bc!(
+    χ,
+    bc::DeformingBodyBC{BodyPointIndex},
+    t::Float64
+)
+    χ_mat = reshape(χ, 3, :)
+    i = bc_point(bc).i
+    χ_mat[1:2, i] = bc_pos(bc)(t)
+    χ_mat[3, i] = bc_angle(bc)(t)
+    nothing
+end
+
 function update!(
     ops::NonlinearEulerBernoulliOps,
     ::BeforeFsiLoop,
