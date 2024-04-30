@@ -610,13 +610,17 @@ function Binv_linearmap(prob::Problem{<:PsiOmegaFluidGrid,<:RigidBody}, B)
     return Binv
 end
 
+
+BICGSTAB_TOL = (; )
+bicgstab_set_tol(; kw...) = global BICGSTAB_TOL = NamedTuple(kw)
+
 function Binv_linearmap(prob::Problem{<:PsiOmegaFluidGrid}, B, Q_Itilde_W)
     nftot = 2 * npanels(prob.bodies)
 
     # Solves f = B*g for g... so g = Binv * f
     # TODO: Add external interface for bicgstabl! options
     Binv = LinearMap(nftot; issymmetric=false) do f, g
-        bicgstabl!(f, B + Q_Itilde_W, g)
+        bicgstabl!(f, B + Q_Itilde_W, g; BICGSTAB_TOL...)
     end
 
     return Binv
