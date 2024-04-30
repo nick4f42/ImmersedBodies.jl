@@ -260,9 +260,10 @@ function solve!(
 )
     solver = SolverPsiOmegaGridCNAB(prob, state)
     t0 = timevalue(state)
+    i0 = timeindex(state)
     dt = timestep(solver.prob)
 
-    for i in 1:timestep_count(prob, (t0, tf))
+    for i in i0 .+ (1:timestep_count(prob, (t0, tf)))
         advance!(state, solver, i)
         f(state)
     end

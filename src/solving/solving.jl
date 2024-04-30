@@ -298,7 +298,10 @@ function SaveToDiskCallback(
     return SaveToDiskCallback(;
         group=parent,
         vals=vals,
-        time=create_dataset(parent, timekey, Float64, (maxcount,)),
+        time=create_dataset(
+            parent, timekey, Float64, dataspace((maxcount,), (-1,)),
+            chunk=(1024,),
+        ),
         timeref=HDF5.Reference(parent, timekey),
         savers=Vector{QuantityDiskSaver}(undef, length(vals.quantities)),
         initialized=false,
@@ -345,7 +348,11 @@ function push_callbacks!(
     callbacks::AbstractVector{<:Callback}, parent, vals::AbstractDict, prob::Problem, tspan
 )
     for (name, items) in vals
-        group = create_group(parent, name)
+        group = if haskey(parent, name)
+            parent[name] :: HDF5.Group
+        else
+            create_group(parent, name)
+        end
         push_callbacks!(callbacks, group, items, prob, tspan)
     end
     return nothing

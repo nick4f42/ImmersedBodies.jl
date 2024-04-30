@@ -12,6 +12,27 @@ abstract type QuantityDiskSaver end
 _last_axis_views(a::AbstractVector) = a
 _last_axis_views(a::AbstractArray) = collect(eachslice(a; dims=ndims(a)))
 
+function create_or_get_dataset(parent, name, dtype, space::Tuple)
+    if haskey(parent, name)
+        dset = parent[name] :: HDF5.Dataset
+        HDF5.set_extent_dims(dset, space)
+        dset
+    else
+        create_dataset(
+            parent, name, dtype,
+            dataspace(space, max_dims=(space[1:end-1]..., -1)),
+            chunk=(space[1:end-1]..., 1)
+        )
+    end
+end
+
+function maybe_set_attribute(dset, name, value)
+    attrs = attributes(dset)
+    if !haskey(attrs, name)
+        attrs[name] = value
+    end
+end
+
 function quantity_values(data::Union{HDF5.Group,HDF5.Dataset})
     @assert haskey(attributes(data), QUANTITY_TYPE_ATTR)
     attr = attributes(data)[QUANTITY_TYPE_ATTR]
@@ -35,9 +56,9 @@ function create_disk_saver(parent, name, ::ArrayQuantity, timeref::HDF5.Referenc
     dtype = datatype(value)
     space = (value_shape(value)..., maxlen)
 
-    dset = create_dataset(parent, name, dtype, space)
-    attributes(dset)[QUANTITY_TYPE_ATTR] = string(nameof(ArrayQuantity))
-    attributes(dset)[TIME_ATTR] = timeref
+    dset = create_or_get_dataset(parent, name, dtype, space)
+    maybe_set_attribute(dset, QUANTITY_TYPE_ATTR, string(nameof(ArrayQuantity)))
+    maybe_set_attribute(dset, TIME_ATTR, timeref)
 
     return ArrayDiskSaver(dset)
 end
@@ -64,10 +85,10 @@ function create_disk_saver(
     dtype = datatype(value)
     space = (value_shape(value)..., maxlen)
 
-    dset = create_dataset(parent, name, dtype, space)
-    attributes(dset)[QUANTITY_TYPE_ATTR] = string(nameof(GridQuantity))
-    attributes(dset)[TIME_ATTR] = timeref
-    attributes(dset)[COORDS_ATTR] = collect(map(to_range_tuple, qty.coords))
+    dset = create_or_get_dataset(parent, name, dtype, space)
+    maybe_set_attribute(dset, QUANTITY_TYPE_ATTR, string(nameof(GridQuantity)))
+    maybe_set_attribute(dset, TIME_ATTR, timeref)
+    maybe_set_attribute(dset, COORDS_ATTR, collect(map(to_range_tuple, qty.coords)))
 
     return ArrayDiskSaver(dset)
 end
@@ -90,12 +111,12 @@ function create_disk_saver(
     dtype = datatype(value)
     space = (value_shape(value)..., maxlen)
 
-    dset = create_dataset(parent, name, dtype, space)
-    attributes(dset)[QUANTITY_TYPE_ATTR] = string(nameof(MultiLevelGridQuantity))
-    attributes(dset)[TIME_ATTR] = timeref
+    dset = create_or_get_dataset(parent, name, dtype, space)
+    maybe_set_attribute(dset, QUANTITY_TYPE_ATTR, string(nameof(MultiLevelGridQuantity)))
+    maybe_set_attribute(dset, TIME_ATTR, timeref)
 
     ranges = reinterpret(reshape, LinRange{Float64,Int}, qty.coords)
-    attributes(dset)[COORDS_ATTR] = map(to_range_tuple, ranges)
+    maybe_set_attribute(dset, COORDS_ATTR, map(to_range_tuple, ranges))
 
     return ArrayDiskSaver(dset)
 end
@@ -145,11 +166,11 @@ function create_disk_saver(
 
     space = (s[1:(qty.dim - 1)]..., dimlen, s[(qty.dim + 1):end]..., maxlen)
 
-    dset = create_dataset(parent, name, dtype, space)
-    attributes(dset)[QUANTITY_TYPE_ATTR] = typename
-    attributes(dset)[TIME_ATTR] = timeref
-    attributes(dset)[CONCAT_DIM_ATTR] = qty.dim
-    attributes(dset)[CONCAT_CUMSUM_ATTR] = map(last, inds)
+    dset = create_or_get_dataset(parent, name, dtype, space)
+    maybe_set_attribute(dset, QUANTITY_TYPE_ATTR, typename)
+    maybe_set_attribute(dset, TIME_ATTR, timeref)
+    maybe_set_attribute(dset, CONCAT_DIM_ATTR, qty.dim)
+    maybe_set_attribute(dset, CONCAT_CUMSUM_ATTR, map(last, inds))
 
     return ConcatArrayDiskSaver(dset, qty.dim, inds)
 end
@@ -206,7 +227,7 @@ function create_disk_saver(
         typename=string(nameof(BodyArrayQuantity)),
     )
 
-    attributes(saver.dset)[BODY_INDEX_ATTR] = qty.bodies
+    maybe_set_attribute(saver.dset, BODY_INDEX_ATTR, qty.bodies)
 
     return saver
 end
