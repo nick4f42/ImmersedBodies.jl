@@ -516,10 +516,39 @@ struct NACA{N<:NacaParams,C<:ParameterizedCurve} <: ClosedCurve
     params::N
     curve::C
     leading_edge::Float64 # Parameter of leading edge
-    function NACA(params::NacaParams)
-        curve = ParameterizedCurve(s -> _point(params, s))
+    tailcut::Float64 # Portion of chord to flatten the trailing edge by
+    function NACA(params::NacaParams; tailcut=0.0, open=false, n_sample=2000)
+        curve = if open
+            ParameterizedCurve(s -> _point(params, s, tailcut); n_sample)
+        else
+            p1 = _point(params, 0.0, tailcut)
+            p2 = _point(params, 1.0, tailcut)
+            cut_length = norm(p2 - p1)
+            arclen = arclength(ParameterizedCurve(s -> _point(params, s, tailcut)))
+            cut_s = cut_length / (cut_length + arclen)
+            s1 = cut_s / 2
+            s2 = 1 - cut_s / 2
+            ParameterizedCurve(; n_sample) do s
+                if s < s1
+                    t = 0.5 + s / cut_s
+                    cut = true
+                elseif s > s2
+                    t = (s - s2) / cut_s
+                    cut = true
+                else
+                    cut = false
+                end
+
+                if cut
+                    p2 + (p1 - p2) * t
+                else
+                    _point(params, (s - s1) / (s2 - s1), tailcut)
+                end
+            end
+        end
+
         leading_edge = curve.inv_param(0.5)
-        return new{typeof(params),typeof(curve)}(params, curve, leading_edge)
+        return new{typeof(params),typeof(curve)}(params, curve, leading_edge, tailcut)
     end
 end
 
@@ -544,8 +573,9 @@ function NACA4(spec::AbstractString)
     return NACA4(m, p, t)
 end
 
-function _point(params::NACA4, s::Real)
-    # Equations from http://airfoiltools.com/airfoil/naca4digit
+# Equations from http://airfoiltools.com/airfoil/naca4digit
+
+function naca_width(params::NACA4, x::Real)
     (; m, p, t) = params
 
     # NACA airfoil constants
@@ -555,8 +585,14 @@ function _point(params::NACA4, s::Real)
     a3 = 0.2843
     a4 = -0.1036 # closed trailing edge
 
+    5 * t * (a0 * sqrt(x) + a1 * x + a2 * x^2 + a3 * x^3 + a4 * x^4)
+end
+
+function _point(params::NACA4, s::Real, tailcut::Real=0.0)
+    (; m, p, t) = params
+
     β = 2 * π * s
-    x = 0.5 * (1 + cos(β))
+    x = 0.5 * (1 + cos(β)) * (1 - tailcut)
 
     if x < p
         yc = m / p^2 * (2 * p * x - x^2)
@@ -566,7 +602,7 @@ function _point(params::NACA4, s::Real)
         dyc = 2 * m / (1 - p)^2 * (p - x)
     end
 
-    yt = 5 * t * (a0 * sqrt(x) + a1 * x + a2 * x^2 + a3 * x^3 + a4 * x^4)
+    yt = naca_width(params, x)
 
     θ = atan(dyc)
     z = SVector(x, yc)
