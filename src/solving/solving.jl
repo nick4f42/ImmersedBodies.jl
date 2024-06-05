@@ -286,32 +286,28 @@ Base.@kwdef mutable struct SaveToDiskCallback{F<:Union{HDF5.File,HDF5.Group},V<:
 end
 
 function SaveToDiskCallback(
-    parent::Union{HDF5.File,HDF5.Group}, vals::ValueGroup, prob::Problem, tspan
+    parent::Union{HDF5.File,HDF5.Group}, vals::ValueGroup, prob::Problem, tspan;
+    i
 )
     maxcount = max_timestep_count(vals.times, prob, tspan)
 
-    # Generate a unique key for time
-    names = [map(string, keys(vals.quantities)); keys(parent)]
-    timekeys = (i == 0 ? "time" : "time$i" for i in Iterators.countfrom(0))
-    timekey = first(Iterators.filter(!in(names), timekeys))
+    timekey = "time"
+    time = create_or_get_dataset(parent, timekey, Float64, (i + maxcount,))
 
     return SaveToDiskCallback(;
         group=parent,
         vals=vals,
-        time=create_dataset(
-            parent, timekey, Float64, dataspace((maxcount,), (-1,)),
-            chunk=(1024,),
-        ),
+        time=time,
         timeref=HDF5.Reference(parent, timekey),
         savers=Vector{QuantityDiskSaver}(undef, length(vals.quantities)),
         initialized=false,
-        timeindex=1,
+        timeindex=1 + i,
         maxcount=maxcount,
     )
 end
 
 function (caller::SaveToDiskCallback)(state::AbstractState)
-    if caller.timeindex > caller.maxcount
+    if !(caller.timeindex in axes(caller.time, 1))
         return nothing
     end
 
@@ -337,15 +333,17 @@ function (caller::SaveToDiskCallback)(state::AbstractState)
 end
 
 function push_callbacks!(
-    callbacks::AbstractVector{<:Callback}, parent, vals::ValueGroup, prob::Problem, tspan
+    callbacks::AbstractVector{<:Callback}, parent, vals::ValueGroup, prob::Problem, tspan;
+    i
 )
-    cb = Callback(SaveToDiskCallback(parent, vals, prob, tspan), vals.times)
+    cb = Callback(SaveToDiskCallback(parent, vals, prob, tspan; i), vals.times)
     push!(callbacks, cb)
     return nothing
 end
 
 function push_callbacks!(
-    callbacks::AbstractVector{<:Callback}, parent, vals::AbstractDict, prob::Problem, tspan
+    callbacks::AbstractVector{<:Callback}, parent, vals::AbstractDict, prob::Problem, tspan;
+    kw...
 )
     for (name, items) in vals
         group = if haskey(parent, name)
@@ -353,7 +351,7 @@ function push_callbacks!(
         else
             create_group(parent, name)
         end
-        push_callbacks!(callbacks, group, items, prob, tspan)
+        push_callbacks!(callbacks, group, items, prob, tspan; kw...)
     end
     return nothing
 end
@@ -452,7 +450,10 @@ function solve!(
     tspan = (timevalue(state), tf)
 
     callbacks = Callback[]
-    push_callbacks!(callbacks, file, save, problem, tspan)
+    push_callbacks!(
+        callbacks, file, save, problem, tspan;
+        i=timeindex(state)
+    )
     append!(callbacks, call)
 
     return solve!(state, problem, tf; call=callbacks, kw...)
