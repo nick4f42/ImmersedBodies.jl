@@ -3,11 +3,20 @@ uuid = "03d9a66e-74a3-49e3-8b11-9834f062834a"
 authors = ["Nick OBrien <nick4f42@proton.me> and contributors"]
 version = "0.1.0"
 
+[deps]
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
 [compat]
 julia = "1.10"
 
 [extras]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "GPUArrays", "AMDGPU", "CUDA"]
