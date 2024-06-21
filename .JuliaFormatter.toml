@@ -2,3 +2,4 @@
 style = "blue"
 import_to_using = false
 always_use_return = false
+whitespace_ops_in_indices = false

@@ -1,3 +1,12 @@
+δ(i, ::Val{N}) where {N} = CartesianIndex(ntuple(==(i), N))
+δ_for(::CartesianIndex{N}) where {N} = Base.Fix2(δ, Val(N))
+
+function permute(f, i)
+    j = i % 3 + 1
+    k = (i + 1) % 3 + 1
+    f(j, k) - f(k, j)
+end
+
 macro loop(inds::Expr, ex)
     if !(
         inds.head == :call &&
@@ -28,12 +37,15 @@ macro loop(inds::Expr, ex)
             $I += $I0
             $ex2
         end
-        $r = $R::CartesianIndices
+        $r = _cartesianindices($R)
         $kern(get_backend($(exprs[1])), 64)(
             $(exprs...), $r[1] - oneunit($r[1]); ndrange=size($r)
         )
     end
 end
+
+_cartesianindices(I::CartesianIndices) = I
+_cartesianindices(I) = CartesianIndices(I)
 
 function _collect_arguments!(syms, ex::Expr, exclude)
     if ex.head == :.
@@ -48,7 +60,7 @@ function _collect_arguments!(syms, ex::Expr, exclude)
         start = ex.head == :(call) ? 2 : 1
         Expr(
             ex.head,
-            ex.args[1:(start - 1)]...,
+            ex.args[1:(start-1)]...,
             (_collect_arguments!(syms, a, exclude) for a in ex.args[start:end])...,
         )
     end
