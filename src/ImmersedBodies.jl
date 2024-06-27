@@ -6,9 +6,7 @@ using OrderedCollections: OrderedDict
 
 export GridKind, Primal, Dual
 export AllAxes
-export GridLocation, Node, Edge, axisindex, setaxis
-export Loc_u, LocVec_u, Loc_ω, LocVec_ω
-export GridArray
+export GridLocation, Node, Edge, Loc_u, Loc_ω
 export Grid, gridcorner, gridstep, coord
 export IrrotationalFlow, UniformFlow
 export AbstractBody, PrescribedBody, StaticBody

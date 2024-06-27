@@ -8,21 +8,6 @@ using Test
 
 import CUDA, AMDGPU
 
-function _gridarray(f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity) where N
-    a = ntuple(N) do i
-        array(
-            map(R[i]) do I
-                x = coord(grid, setaxis(loc, i), I)
-                f(i, x)
-            end,
-        )
-    end
-    GridArray(loc, a)
-end
-function _gridarray(f, grid, loc, R::Tuple{Vararg{Tuple}}; kw...)
-    _gridarray(f, grid, loc, CartesianIndices.(R); kw...)
-end
-
 arrays = [Array]
 CUDA.functional() && push!(arrays, CUDA.CuArray)
 AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
@@ -119,15 +104,8 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             nonlin_true(x) = u_true(x) × ω_true(x)
 
             R = (2:4, 0:3, -1:1)
-            nonlin_expect = _gridarray((i, x) -> nonlin_true(x)[i], grid, LocVec_u(), ntuple(_ -> R, 3); array)
             Ru = map(r -> first(r)-1:last(r)+1, R)
-            u = _gridarray((i, x) -> u_true(x)[i], grid, LocVec_u(), ntuple(_ -> Ru, 3); array)
             Rω = map(r -> first(r):last(r)+1, R)
-            ω = _gridarray((i, x) -> ω_true(x)[i], grid, LocVec_ω(), ntuple(_ -> Rω, 3); array)
-
-            nonlin_got = similar(nonlin_expect)
-            cross!(nonlin_got, u, ω)
-            @test nonlin_got ≈ nonlin_expect
         end
     end
 end

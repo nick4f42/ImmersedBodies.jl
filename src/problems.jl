@@ -2,39 +2,14 @@ abstract type GridKind end
 struct Primal <: GridKind end
 struct Dual <: GridKind end
 
-struct AllAxes end
-
 abstract type GridLocation{K<:GridKind} end
 struct Node{K} <: GridLocation{K} end
-struct Edge{K,I<:Union{Int,AllAxes}} <: GridLocation{K}
-    i::I
-end
-Edge{K}(i::I) where {K,I} = Edge{K,I}(i)
-Edge{K,AllAxes}() where {K} = Edge{K,AllAxes}(AllAxes())
-
-axisindex(x::Edge) = x.i
-setaxis(x::Edge{K}, i) where {K} = Edge{K}(i)
-
-const Loc_u = Edge{Primal,Int}
-const LocVec_u = Edge{Primal,AllAxes}
-const Loc_ω = Edge{Dual,Int}
-const LocVec_ω = Edge{Dual,AllAxes}
-
-const OneArrayOrTuple{T,N} = Union{AbstractArray{T,N},NTuple{N,AbstractArray{T,N}}}
-struct GridArray{L<:GridLocation,T,N,A<:OneArrayOrTuple{T,N}}
-    loc::L
-    a::A
+struct Edge{K} <: GridLocation{K}
+    i::Int
 end
 
-unwrap(a::GridArray) = a.a
-array_axis(a::GridArray) = (a.a, axisindex(a))
-axisindex(a::GridArray) = axisindex(a.loc)
-
-axispairs(a::GridArray{<:Any,NTuple{N}}) where {N} = ntuple(i -> (i, a.a[i]), N)
-axispairs(a::GridArray{LocVec_ω,<:AbstractArray}) = ((3, a.a))
-
-Base.similar(a::GridArray) = GridArray(a.loc, similar(a.a))
-Base.similar(a::GridArray{L,T,N,Tuple}) where {L,T,N} = GridArray(a.loc, similar.(a.a))
+const Loc_u = Edge{Primal}
+const Loc_ω = Edge{Dual}
 
 """
     Grid(; h, n, x0, levels)
@@ -68,8 +43,8 @@ end
 
 coord(grid, loc, I, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
 
-_cellcoord((; i)::Edge{Primal,Int}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N))//2
-_cellcoord((; i)::Edge{Dual,Int}, ::Val{N}) where {N} = SVector(ntuple(==(i), N))//2
+_cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N))//2
+_cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N))//2
 
 """
     IrrotationalFlow
