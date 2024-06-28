@@ -1,6 +1,14 @@
 using ImmersedBodies
 using ImmersedBodies:
-    @loop, unit, nonlinear!, rot!, delta_yang3_smooth1, Reg, update_weights!, interpolate!
+    @loop,
+    unit,
+    nonlinear!,
+    rot!,
+    curl!,
+    delta_yang3_smooth1,
+    Reg,
+    update_weights!,
+    interpolate!
 using KernelAbstractions
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
@@ -211,6 +219,43 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             ω_got = rot!(similar.(ω_expect), u; h=grid.h)
 
             @test all(@. no_offset_view(ω_got) ≈ no_offset_view(ω_expect))
+        end
+        @testset "2D curl" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            ψ0 = SVector(0, 0, rand())
+            dψ = [
+                @SArray(zeros(2, 3))
+                @SArray(rand(1, 2)) 0
+            ]
+            ψ_true(x) = ψ0 + dψ[:, 1:2] * x
+            u_true(x) = _curl(dψ)
+
+            R = (2:4, 0:3)
+            u_expect = _gridarray(u_true, grid, Loc_u, (R, R); array)
+            Rψ = map(r -> first(r):last(r)+1, R)
+            ψ = _gridarray(ψ_true, grid, Loc_ω, (Rψ,); array, dims=3)[1]
+
+            u_got = curl!(similar.(u_expect), ψ; h=grid.h)
+
+            @test all(@. no_offset_view(u_got) ≈ no_offset_view(u_expect))
+        end
+        @testset "3D curl" begin
+            grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
+
+            ψ0 = @SArray rand(3)
+            dψ = @SArray rand(3, 3)
+            ψ_true(x) = ψ0 + dψ * x
+            u_true(x) = _curl(dψ)
+
+            R = (2:4, 0:3, -1:1)
+            u_expect = _gridarray(u_true, grid, Loc_u, (R, R, R); array)
+            Rψ = map(r -> first(r):last(r)+1, R)
+            ψ = _gridarray(ψ_true, grid, Loc_ω, (Rψ, Rψ, Rψ); array)
+
+            u_got = curl!(similar.(u_expect), ψ; h=grid.h)
+
+            @test all(@. no_offset_view(u_got) ≈ no_offset_view(u_expect))
         end
         @testset "regularize/interpolate" begin
             nb = 20

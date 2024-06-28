@@ -30,6 +30,22 @@ function rot(i, u, I; h)
     end
 end
 
+function curl!(u, ψ; h)
+    for (i, uᵢ) in pairs(u)
+        @loop uᵢ (I in uᵢ) uᵢ[I] = curl(i, ψ, I; h)
+    end
+    u
+end
+
+function curl(i, ψ, I; h)
+    δ = unit(length(I))
+    permute(i, Vec(), vec_kind(ψ)) do j, k
+        let ψ = ensure_3d(ψ)
+            (ψ[k][I+δ(j)] - ψ[k][I]) / h
+        end
+    end
+end
+
 struct DeltaFunc{F}
     f::F
     support::Int
