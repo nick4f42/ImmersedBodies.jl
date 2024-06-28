@@ -1,5 +1,5 @@
 using ImmersedBodies
-using ImmersedBodies: @loop, δ, δ_for
+using ImmersedBodies: @loop, unit, nonlinear!
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
 using StaticArrays
@@ -7,6 +7,20 @@ using LinearAlgebra
 using Test
 
 import CUDA, AMDGPU
+
+function _gridarray(f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity, dims=ntuple(identity, N)) where N
+    map(dims, R) do i, r
+        OffsetArray(array(
+            map(r) do I
+                x = coord(grid, loc(i), I)
+                f(x)[i]
+            end,
+        ), r)
+    end
+end
+function _gridarray(f, grid, loc, R::Tuple{Vararg{Tuple}}; kw...)
+    _gridarray(f, grid, loc, CartesianIndices.(R); kw...)
+end
 
 arrays = [Array]
 CUDA.functional() && push!(arrays, CUDA.CuArray)
@@ -16,15 +30,15 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
 @testset "ImmersedBodies.jl" verbose = true begin
     @testset "utils" begin
-        @test δ(1, Val(2)) == CartesianIndex((1, 0))
-        @test δ(1, Val(3)) == CartesianIndex((1, 0, 0))
-        @test δ(3, Val(3)) == CartesianIndex((0, 0, 1))
-        @test δ_for(CartesianIndex((9, 9, 9, 9)))(2) == CartesianIndex((0, 1, 0, 0))
+        @test unit(Val(2), 1) == CartesianIndex((1, 0))
+        @test unit(Val(3), 1) == CartesianIndex((1, 0, 0))
+        @test unit(Val(3), 3) == CartesianIndex((0, 0, 1))
+        @test unit(4)(2) == CartesianIndex((0, 1, 0, 0))
 
-        @test_throws "I in R" @macroexpand1 @loop (2 in R) x[I] = y[I]
-        @test_throws "I in R" @macroexpand1 @loop in(I, R, S) x[I] = y[I]
-        @test_throws MethodError @macroexpand1 @loop I x[I] = y[I]
-        @test_throws MethodError @macroexpand1 @loop (I in R) x[I] = y[I] extra
+        @test_throws "I in R" @macroexpand1 @loop x (2 in R) x[I] = y[I]
+        @test_throws "I in R" @macroexpand1 @loop x (in(I, R, S)) x[I] = y[I]
+        @test_throws ArgumentError @macroexpand1 @loop x I x[I] = y[I]
+        @test_throws MethodError @macroexpand1 @loop x (I in R) x[I] = y[I] extra
     end
 
     @testset "utils $array" for array in arrays
@@ -39,7 +53,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             R = CartesianIndices((2:4, 1:2, -4:-4))
 
             @views a1[R] = b1[R]
-            @loop (I in R) a2[I] = b2[I]
+            @loop a2 (I in R) a2[I] = b2[I]
 
             # Drop the offset indexing and check equality on the CPU.
             @test no_offset_view(a1) == Array(no_offset_view(a2))
@@ -49,13 +63,13 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             a = array([1.0, 5.0, 2.5])
             b = array([3, 7, -4])
             c = array(zeros(3))
-            @loop (I in (2:3,)) c[I] = b[I] - 2 * a[I]
+            @loop c (I in (2:3,)) c[I] = b[I] - 2 * a[I]
             @test Array(c) ≈ [0, -3, -9]
         end
 
         let
             a = array([1.0, 2.0, 3.0])
-            @test_throws MethodError @loop (I in +) a[I] = 0
+            @test_throws MethodError @loop a (I in +) a[I] = 0
         end
     end
 
@@ -92,20 +106,49 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
     end
 
     @testset "operators $array" for array in arrays
-        @testset "nonlinear" begin
+        @testset "2D nonlinear" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            u0 = [@SArray(rand(2)); 0]
+            du = [@SArray(rand(2,2)); @SArray(zeros(1,2))]
+            ω0 = [@SArray(zeros(2)); rand()]
+            dω = [@SArray(zeros(2,2)); @SArray(rand(1,2))]
+            u_true(x) = u0 + du * x
+            ω_true(x) = ω0 + dω * x
+            nonlin_true(x) = u_true(x) × ω_true(x)
+
+            R = (2:4, 0:3)
+            nonlin_expect = _gridarray(nonlin_true, grid, Loc_u, (R, R); array)
+            Ru = map(r -> first(r)-1:last(r)+1, R)
+            u = _gridarray(u_true, grid, Loc_u, (Ru, Ru); array)
+            Rω = map(r -> first(r):last(r)+1, R)
+            ω = _gridarray(ω_true, grid, Loc_ω, (Rω,); array, dims=3)[1]
+
+            nonlin_got = nonlinear!(similar.(nonlin_expect), u, ω)
+
+            @test all(@. no_offset_view(nonlin_got) ≈ no_offset_view(nonlin_expect))
+        end
+        @testset "3D nonlinear" begin
             grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
 
-            u0 = @SVector rand(3)
-            du = @SMatrix rand(3, 3)
-            ω0 = @SVector rand(3)
-            dω = @SMatrix rand(3, 3)
+            u0 = @SArray rand(3)
+            du = @SArray rand(3, 3)
+            ω0 = @SArray rand(3)
+            dω = @SArray rand(3, 3)
             u_true(x) = u0 + du * x
             ω_true(x) = ω0 + dω * x
             nonlin_true(x) = u_true(x) × ω_true(x)
 
             R = (2:4, 0:3, -1:1)
+            nonlin_expect = _gridarray(nonlin_true, grid, Loc_u, (R, R, R); array)
             Ru = map(r -> first(r)-1:last(r)+1, R)
+            u = _gridarray(u_true, grid, Loc_u, (Ru, Ru, Ru); array)
             Rω = map(r -> first(r):last(r)+1, R)
+            ω = _gridarray(ω_true, grid, Loc_ω, (Rω, Rω, Rω); array)
+
+            nonlin_got = nonlinear!(similar.(nonlin_expect), u, ω)
+
+            @test all(@. no_offset_view(nonlin_got) ≈ no_offset_view(nonlin_expect))
         end
     end
 end
