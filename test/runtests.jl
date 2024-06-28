@@ -8,7 +8,9 @@ using Test
 
 import CUDA, AMDGPU
 
-function _gridarray(f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity, dims=ntuple(identity, N)) where N
+function _gridarray(
+    f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity, dims=ntuple(identity, N)
+) where {N}
     map(dims, R) do i, r
         OffsetArray(array(
             map(r) do I
@@ -110,9 +112,9 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
 
             u0 = [@SArray(rand(2)); 0]
-            du = [@SArray(rand(2,2)); @SArray(zeros(1,2))]
+            du = [@SArray(rand(2, 2)); @SArray(zeros(1, 2))]
             ω0 = [@SArray(zeros(2)); rand()]
-            dω = [@SArray(zeros(2,2)); @SArray(rand(1,2))]
+            dω = [@SArray(zeros(2, 2)); @SArray(rand(1, 2))]
             u_true(x) = u0 + du * x
             ω_true(x) = ω0 + dω * x
             nonlin_true(x) = u_true(x) × ω_true(x)
