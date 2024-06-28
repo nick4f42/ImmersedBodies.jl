@@ -175,6 +175,26 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
             @test all(@. no_offset_view(nonlin_got) ≈ no_offset_view(nonlin_expect))
         end
+        @testset "2D rot" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            u0 = @SArray(rand(2))
+            du = [
+                @SArray(rand(2, 2)) @SArray(zeros(2))
+                @SArray(zeros(1, 3))
+            ]
+            u_true(x) = u0 + du[1:2, 1:2] * x
+            ω_true(x) = _curl(du)
+
+            R = (2:4, 0:3)
+            ω_expect = _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=3)[1]
+            Ru = map(r -> first(r)-1:last(r), R)
+            u = _gridarray(u_true, grid, Loc_u, (Ru, Ru); array)
+
+            ω_got = rot!(similar(ω_expect), u; h=grid.h)
+
+            @test no_offset_view(ω_got) ≈ no_offset_view(ω_expect)
+        end
         @testset "3D rot" begin
             grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
 
