@@ -8,7 +8,8 @@ using ImmersedBodies:
     delta_yang3_smooth1,
     Reg,
     update_weights!,
-    interpolate!
+    interpolate!,
+    regularize!
 using KernelAbstractions
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
@@ -271,13 +272,25 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             u_true(x) = u0 + du * x
 
             R = map(n -> 0:n, Tuple(grid.n))
-            u = _gridarray(u_true, grid, Loc_u, (R, R); array)
 
-            ub_expect = permutedims(stack(u_true.(Array(xb))))
-            ub_got = KernelAbstractions.zeros(backend, T, nb, 2)
-            interpolate!(ub_got, reg, u)
+            let
+                u = _gridarray(u_true, grid, Loc_u, (R, R); array)
 
-            @test Array(ub_got) ≈ ub_expect
+                ub_expect = permutedims(stack(u_true.(Array(xb))))
+                ub_got = KernelAbstractions.zeros(backend, T, nb, 2)
+                interpolate!(ub_got, reg, u)
+
+                @test Array(ub_got) ≈ ub_expect
+            end
+
+            let
+                fu = _gridarray(zero, grid, Loc_u, (R, R); array)
+                fb = KernelAbstractions.ones(backend, T, nb, 2)
+                regularize!(fu, reg, fb)
+
+                # `sum` not forwarded to GPU array by `OffsetArray`.
+                @test all(@. sum(no_offset_view(fu)) ≈ nb)
+            end
         end
     end
 end

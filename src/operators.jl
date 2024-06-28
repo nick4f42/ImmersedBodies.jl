@@ -126,3 +126,27 @@ function interpolate!(ub::AbstractMatrix, reg::Reg, u)
 end
 
 support_range(I, s) = CartesianIndices(map(i -> i .+ (-s:s), Tuple(I)))
+
+function regularize!(fu, reg::Reg{<:Any,<:Any,N}, fb) where {N}
+    weights = reg.weights
+    Is = reg.I
+    delta = reg.delta
+    s = delta.support
+    R = ntuple(_ -> 1:(2s+1), N)
+
+    for fuᵢ in fu
+        fuᵢ .= 0
+    end
+
+    for J in CartesianIndices(fb)
+        ib, i = Tuple(J)
+        fuᵢ = fu[i]
+        @loop fuᵢ (K in R) begin
+            I0 = CartesianIndex(Tuple(Is[ib, i] .- (s + 1)))
+            I = I0 + K
+            fuᵢ[I] += fb[J] * weights[K, ib, i]
+        end
+    end
+
+    fu
+end
