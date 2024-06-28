@@ -58,3 +58,16 @@ end
 
 _cartesianindices(I::CartesianIndices) = I
 _cartesianindices(I) = CartesianIndices(I)
+
+# Non-allocating sum(map(f, a, b)) for arrays.
+function sum_map(f, a, b)
+    s = zero(promote_type(eltype(a), eltype(b)))
+    # b not included in eachindex to work on the GPU.
+    for i in eachindex(a)
+        s += f(a[i], b[i])
+    end
+    s
+end
+
+# Version of LinearAlgebra.dot that works on the GPU.
+dot(a, b) = sum_map(*, a, b)

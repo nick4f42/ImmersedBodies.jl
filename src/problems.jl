@@ -35,7 +35,7 @@ gridcorner((; x0, h, n)::Grid, level::Integer) = x0 + h * n * (1 - 2^(level - 1)
 gridstep(grid::Grid) = grid.h
 gridstep(grid::Grid, level::Integer) = grid.h * 2^(level - 1)
 
-function coord(grid::Grid, loc, I::SVector{N}, args...) where {N}
+function coord(grid::Grid, loc, I::SVector{N,<:Integer}, args...) where {N}
     x0 = gridcorner(grid, args...)
     h = gridstep(grid, args...)
     x0 + h * (I + _cellcoord(loc, Val(N)))
@@ -43,8 +43,8 @@ end
 
 coord(grid, loc, I, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
 
-_cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N))//2
-_cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N))//2
+_cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N)) / 2
+_cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N)) / 2
 
 """
     IrrotationalFlow

@@ -1,5 +1,7 @@
 using ImmersedBodies
-using ImmersedBodies: @loop, unit, nonlinear!, rot!
+using ImmersedBodies:
+    @loop, unit, nonlinear!, rot!, delta_yang3_smooth1, Reg, update_weights!, interpolate!
+using KernelAbstractions
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
 using StaticArrays
@@ -7,6 +9,8 @@ using LinearAlgebra
 using Test
 
 import CUDA, AMDGPU
+
+_backend(array) = get_backend(array([0]))
 
 function _gridarray(
     f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity, dims=ntuple(identity, N)
@@ -110,7 +114,23 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
         end
     end
 
+    @testset "operators" begin
+        @testset "$δ" for δ in (delta_yang3_smooth1,)
+            s = δ.support
+            let r = s .+ 0.5 .+ [0.0, 1e-3, 0.5, 1.0, 100.0]
+                @test all(@. δ(r) ≈ 0)
+                @test all(@. δ(-r) ≈ 0)
+            end
+
+            let n = 1000
+                @test 2s / (n - 1) * sum(δ, range(-s, s, n)) ≈ 1
+            end
+        end
+    end
+
     @testset "operators $array" for array in arrays
+        backend = _backend(array)
+
         @testset "2D nonlinear" begin
             grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
 
@@ -171,6 +191,28 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             ω_got = rot!(similar.(ω_expect), u; h=grid.h)
 
             @test all(@. no_offset_view(ω_got) ≈ no_offset_view(ω_expect))
+        end
+        @testset "regularize/interpolate" begin
+            nb = 20
+            xb = array([SVector(cos(t), sin(t)) for t in range(0, 2π, nb)])
+            T = Float64
+
+            grid = Grid(; h=0.05, n=(80, 80), x0=(-2.0, -2.0), levels=3)
+            reg = Reg(backend, T, delta_yang3_smooth1, nb, Val(2))
+            update_weights!(reg, grid, 1:nb, xb)
+
+            u0 = @SArray rand(2)
+            du = @SArray rand(2, 2)
+            u_true(x) = u0 + du * x
+
+            R = map(n -> 0:n, Tuple(grid.n))
+            u = _gridarray(u_true, grid, Loc_u, (R, R); array)
+
+            ub_expect = permutedims(stack(u_true.(Array(xb))))
+            ub_got = KernelAbstractions.zeros(backend, T, nb, 2)
+            interpolate!(ub_got, reg, u)
+
+            @test Array(ub_got) ≈ ub_expect
         end
     end
 end

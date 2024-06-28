@@ -2,7 +2,8 @@ module ImmersedBodies
 
 using StaticArrays
 using OffsetArrays
-using KernelAbstractions: get_backend, @index, @kernel
+using KernelAbstractions
+using EllipsisNotation
 
 export z_vector
 export GridKind, Primal, Dual
