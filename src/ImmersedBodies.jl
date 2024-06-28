@@ -1,8 +1,10 @@
 module ImmersedBodies
 
 using StaticArrays
+using OffsetArrays
 using KernelAbstractions: get_backend, @index, @kernel
 
+export z_vector
 export GridKind, Primal, Dual
 export AllAxes
 export GridLocation, Node, Edge, Loc_u, Loc_ω

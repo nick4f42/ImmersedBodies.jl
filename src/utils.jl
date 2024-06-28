@@ -1,21 +1,23 @@
 unit(::Val{N}, i) where {N} = CartesianIndex(ntuple(==(i), N))
 unit(n) = Base.Fix1(unit, Val(n))
 
-ensure_3d(x::Tuple) = x
-ensure_3d(x::AbstractArray) = (x, x, x)
+z_vector(a) = OffsetArray(SVector((a,)), 3:3)
+
+ensure_3d(a::Tuple) = a
+ensure_3d(a::AbstractArray) = z_vector(a)
 
 struct Vec end
 struct VecZ end
 vec_kind(x::Tuple) = Vec()
 vec_kind(x::AbstractArray) = VecZ()
 
-function permute(f, i, ::Vec, ::Vec)
+function permute(f, i::Int, ::Vec, ::Vec)
     j = i % 3 + 1
     k = (i + 1) % 3 + 1
     f(j, k) - f(k, j)
 end
 
-function permute(f, i, ::Vec, ::VecZ)
+function permute(f, i::Int, ::Vec, ::VecZ)
     @assert i in (1, 2)
     i == 1 ? f(2, 3) : -f(1, 3)
 end
