@@ -11,11 +11,16 @@ struct VecZ end
 vec_kind(x::Tuple) = Vec()
 vec_kind(x::AbstractArray) = VecZ()
 
-function permute(f, i::Int, ::Vec, ::Vec)
+axispairs(x::Tuple) = pairs(x)
+axispairs(x::AbstractArray) = (3 => x,)
+
+function permute(f, i::Int)
     j = i % 3 + 1
     k = (i + 1) % 3 + 1
     f(j, k) - f(k, j)
 end
+
+permute(f, i, ::Vec, ::Vec) = permute(f, i)
 
 function permute(f, i::Int, ::Vec, ::VecZ)
     @assert i in (1, 2)

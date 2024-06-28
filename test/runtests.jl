@@ -1,5 +1,5 @@
 using ImmersedBodies
-using ImmersedBodies: @loop, unit, nonlinear!
+using ImmersedBodies: @loop, unit, nonlinear!, rot!
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
 using StaticArrays
@@ -23,6 +23,9 @@ end
 function _gridarray(f, grid, loc, R::Tuple{Vararg{Tuple}}; kw...)
     _gridarray(f, grid, loc, CartesianIndices.(R); kw...)
 end
+
+# curl of Ax
+_curl(A) = SVector(A[3, 2] - A[2, 3], A[1, 3] - A[3, 1], A[2, 1] - A[1, 2])
 
 arrays = [Array]
 CUDA.functional() && push!(arrays, CUDA.CuArray)
@@ -151,6 +154,23 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             nonlin_got = nonlinear!(similar.(nonlin_expect), u, ω)
 
             @test all(@. no_offset_view(nonlin_got) ≈ no_offset_view(nonlin_expect))
+        end
+        @testset "3D rot" begin
+            grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
+
+            u0 = @SArray rand(3)
+            du = @SArray rand(3, 3)
+            u_true(x) = u0 + du * x
+            ω_true(x) = _curl(du)
+
+            R = (2:4, 0:3, -1:1)
+            ω_expect = _gridarray(ω_true, grid, Loc_ω, (R, R, R); array)
+            Ru = map(r -> first(r)-1:last(r), R)
+            u = _gridarray(u_true, grid, Loc_u, (Ru, Ru, Ru); array)
+
+            ω_got = rot!(similar.(ω_expect), u; h=grid.h)
+
+            @test all(@. no_offset_view(ω_got) ≈ no_offset_view(ω_expect))
         end
     end
 end

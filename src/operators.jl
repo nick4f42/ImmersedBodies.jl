@@ -15,3 +15,17 @@ function nonlinear(i, u, ω, I)
         end
     end
 end
+
+function rot!(ω, u; h)
+    for (i, ωᵢ) in axispairs(ω)
+        @loop ωᵢ (I in ωᵢ) ωᵢ[I] = rot(i, u, I; h)
+    end
+    ω
+end
+
+function rot(i, u, I; h)
+    δ = unit(length(I))
+    permute(i) do j, k
+        (u[k][I] - u[k][I-δ(j)]) / h
+    end
+end
