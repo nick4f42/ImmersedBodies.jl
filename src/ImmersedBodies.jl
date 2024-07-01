@@ -14,6 +14,7 @@ export IrrotationalFlow, UniformFlow
 export AbstractBody, PrescribedBody, StaticBody
 export IBProblem
 
+include("fft-r2r.jl")
 include("utils.jl")
 include("problems.jl")
 include("operators.jl")

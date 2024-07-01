@@ -17,6 +17,9 @@ using StaticArrays
 using LinearAlgebra
 using Test
 
+import FFTW
+import ImmersedBodies: FFT_R2R
+
 import CUDA, AMDGPU
 
 _backend(array) = get_backend(array([0]))
@@ -39,6 +42,9 @@ end
 
 # curl of Ax
 _curl(A) = SVector(A[3, 2] - A[2, 3], A[1, 3] - A[3, 1], A[2, 1] - A[1, 2])
+
+_kind_str(kind::Tuple) = string("(", join(FFTW.kind2string.(kind), ", "), ")")
+_kind_str(kind) = FFTW.kind2string(kind)
 
 arrays = [Array]
 CUDA.functional() && push!(arrays, CUDA.CuArray)
@@ -120,6 +126,35 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
                 (x0 - n * h / 2) + 2h * SVector(1.5, 3)
             @test coord(grid, Edge{Dual}(2), (1, 3), 2) ≈
                 (x0 - n * h / 2) + 2h * SVector(1, 3.5)
+        end
+    end
+
+    @testset "FFT R2R $array" for array in arrays
+        params = [
+            (FFTW.RODFT00, (8, 7), 1:2),
+            (FFTW.REDFT10, (9, 6), 1:2),
+            (FFTW.REDFT01, (7, 8), 1:2),
+            ((FFTW.RODFT00, FFTW.REDFT01), (5, 9), [(1, 2)]),
+            ((FFTW.RODFT00, FFTW.REDFT10, FFTW.REDFT01), (3, 6, 4), [(1, 2, 3)]),
+        ]
+        @testset "$(_kind_str(kind)) size=$sz" for (kind, sz, dimss) in params
+            backend = _backend(array)
+            x1 = rand(sz...)
+            x2 = array(x1)
+            y1 = similar(x1)
+            y2 = similar(x2)
+
+            for dims in dimss
+                y1 .= 0
+                y2 .= 1
+
+                p1 = FFTW.plan_r2r(x1, kind, dims)
+                p2 = FFT_R2R.bad_plan_r2r(x2, Val.(kind), dims)
+
+                mul!(y1, p1, x1)
+                mul!(y2, p2, x2)
+                @test y1 ≈ convert(Array, y2)
+            end
         end
     end
 
