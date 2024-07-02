@@ -8,16 +8,14 @@ end
 function nonlinear(i, u, ω, I)
     δ = unit(length(I))
     permute(i, vec_kind(u), vec_kind(ω)) do j, k
-        let ω = ensure_3d(ω)
-            uI = (u[j][I] + u[j][I-δ(i)] + u[j][I+δ(j)] + u[j][I-δ(i)+δ(j)]) / 4
-            ωI = (ω[k][I] + ω[k][I+δ(j)]) / 2
-            uI * ωI
-        end
+        uI = (u[j][I] + u[j][I-δ(i)] + u[j][I+δ(j)] + u[j][I-δ(i)+δ(j)]) / 4
+        ωI = (ω[k][I] + ω[k][I+δ(j)]) / 2
+        uI * ωI
     end
 end
 
 function rot!(ω, u; h)
-    for (i, ωᵢ) in axispairs(ω)
+    for (i, ωᵢ) in pairs(ω)
         @loop ωᵢ (I in ωᵢ) ωᵢ[I] = rot(i, u, I; h)
     end
     ω
@@ -40,9 +38,7 @@ end
 function curl(i, ψ, I; h)
     δ = unit(length(I))
     permute(i, Vec(), vec_kind(ψ)) do j, k
-        let ψ = ensure_3d(ψ)
-            (ψ[k][I+δ(j)] - ψ[k][I]) / h
-        end
+        (ψ[k][I+δ(j)] - ψ[k][I]) / h
     end
 end
 

@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 EllipsisNotation = "da5c29d0-fa7d-589e-88eb-ea29b0a81949"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"

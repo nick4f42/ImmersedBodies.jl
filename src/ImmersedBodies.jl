@@ -4,8 +4,8 @@ using StaticArrays
 using OffsetArrays
 using KernelAbstractions
 using EllipsisNotation
+import Adapt
 
-export z_vector
 export GridKind, Primal, Dual
 export AllAxes
 export GridLocation, Node, Edge, Loc_u, Loc_ω

@@ -1,18 +1,23 @@
 unit(::Val{N}, i) where {N} = CartesianIndex(ntuple(==(i), N))
 unit(n) = Base.Fix1(unit, Val(n))
 
-z_vector(a) = OffsetArray(SVector((a,)), 3:3)
+struct OffsetTuple{O,T<:Tuple}
+    x::T
+    OffsetTuple{O}(x::T) where {O,T} = new{O,T}(x)
+end
 
-ensure_3d(a::Tuple) = a
-ensure_3d(a::AbstractArray) = z_vector(a)
+Base.getindex(a::OffsetTuple{O}, i::Integer) where {O} = a.x[i-O+1]
+Base.length(a::OffsetTuple) = length(a.x)
+Base.pairs(a::OffsetTuple{O}) where {O} = Base.Pairs(a, ntuple(i -> i - 1 + O, length(a)))
+
+function Adapt.adapt_structure(to, a::OffsetTuple{O}) where {O}
+    OffsetTuple{O}(Adapt.adapt_structure(to, a.x))
+end
 
 struct Vec end
 struct VecZ end
 vec_kind(x::Tuple) = Vec()
-vec_kind(x::AbstractArray) = VecZ()
-
-axispairs(x::Tuple) = pairs(x)
-axispairs(x::AbstractArray) = (3 => x,)
+vec_kind(x::OffsetTuple{3,<:NTuple{1}}) = VecZ()
 
 function permute(f, i::Int)
     j = i % 3 + 1

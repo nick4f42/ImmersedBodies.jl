@@ -2,6 +2,7 @@ using ImmersedBodies
 using ImmersedBodies:
     @loop,
     unit,
+    OffsetTuple,
     nonlinear!,
     rot!,
     curl!,
@@ -191,7 +192,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             Ru = map(r -> first(r)-1:last(r)+1, R)
             u = _gridarray(u_true, grid, Loc_u, (Ru, Ru); array)
             Rω = map(r -> first(r):last(r)+1, R)
-            ω = _gridarray(ω_true, grid, Loc_ω, (Rω,); array, dims=3)[1]
+            ω = OffsetTuple{3}(_gridarray(ω_true, grid, Loc_ω, (Rω,); array, dims=(3,)))
 
             nonlin_got = nonlinear!(similar.(nonlin_expect), u, ω)
 
@@ -231,13 +232,16 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             ω_true(x) = _curl(du)
 
             R = (2:4, 0:3)
-            ω_expect = _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=3)[1]
+            ω_expect = OffsetTuple{3}(
+                _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=(3,))
+            )
             Ru = map(r -> first(r)-1:last(r), R)
             u = _gridarray(u_true, grid, Loc_u, (Ru, Ru); array)
 
-            ω_got = rot!(similar(ω_expect), u; h=grid.h)
+            ω_got = OffsetTuple{3}((similar(ω_expect[3]),))
+            rot!(ω_got, u; h=grid.h)
 
-            @test no_offset_view(ω_got) ≈ no_offset_view(ω_expect)
+            @test no_offset_view(ω_got[3]) ≈ no_offset_view(ω_expect[3])
         end
         @testset "3D rot" begin
             grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
@@ -270,7 +274,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             R = (2:4, 0:3)
             u_expect = _gridarray(u_true, grid, Loc_u, (R, R); array)
             Rψ = map(r -> first(r):last(r)+1, R)
-            ψ = _gridarray(ψ_true, grid, Loc_ω, (Rψ,); array, dims=3)[1]
+            ψ = OffsetTuple{3}(_gridarray(ψ_true, grid, Loc_ω, (Rψ,); array, dims=(3,)))
 
             u_got = curl!(similar.(u_expect), ψ; h=grid.h)
 
