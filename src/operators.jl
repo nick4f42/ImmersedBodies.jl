@@ -73,6 +73,8 @@ struct Reg{F,T,N,A<:AbstractArray{SVector{N,Int},2},M,W<:AbstractArray{T,M}}
     weights::W
 end
 
+Adapt.@adapt_structure Reg
+
 function Reg(backend, T, delta::DeltaFunc, nb, ::Val{N}) where {N}
     I = KernelAbstractions.zeros(backend, SVector{N,Int}, nb, N)
 
@@ -85,23 +87,18 @@ end
 
 function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
     @assert ndims(ibs) == 1 && axes(ibs) == axes(xbs)
-    weights = reg.weights
-    Is = reg.I
-    delta = reg.delta
-    s = delta.support
-
     for i in 1:N
-        @loop weights (J in ibs) begin
+        @loop reg.weights (J in ibs) begin
             ib = J[1]
             xb = xbs[ib]
 
             xu0 = coord(grid, Loc_u(i), zeros(SVector{N,Int}))
-            Is[ib, i] = I = @. round(Int, (xb - xu0) / grid.h)
+            reg.I[ib, i] = I = @. round(Int, (xb - xu0) / grid.h)
 
-            for k in CartesianIndices(axes(weights)[1:N])
-                ΔI = (-s - 1) .+ SVector(Tuple(k))
+            for k in CartesianIndices(axes(reg.weights)[1:N])
+                ΔI = (-reg.delta.support - 1) .+ SVector(Tuple(k))
                 xu = coord(grid, Loc_u(i), I + ΔI)
-                weights[k, ib, i] = delta((xb - xu) / grid.h)
+                reg.weights[k, ib, i] = reg.delta((xb - xu) / grid.h)
             end
         end
     end
@@ -109,26 +106,19 @@ function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
 end
 
 function interpolate!(ub::AbstractMatrix, reg::Reg, u)
-    weights = reg.weights
-    Is = reg.I
-    delta = reg.delta
+    s = reg.delta.support
     @loop ub (J in ub) begin
         ib, i = Tuple(J)
-        w = @view weights[.., ib, i]
-        I = support_range(Is[ib, i], delta.support)
+        w = @view reg.weights[.., ib, i]
+        Ib = reg.I[ib, i]
+        I = CartesianIndices(map(i -> i .+ (-s:s), Tuple(Ib)))
         uᵢ = @view u[i][I]
         ub[J] = dot(w, uᵢ)
     end
 end
 
-support_range(I, s) = CartesianIndices(map(i -> i .+ (-s:s), Tuple(I)))
-
 function regularize!(fu, reg::Reg{<:Any,<:Any,N}, fb) where {N}
-    weights = reg.weights
-    Is = reg.I
-    delta = reg.delta
-    s = delta.support
-    R = ntuple(_ -> 1:(2s+1), N)
+    R = axes(reg.weights)[1:N]
 
     for fuᵢ in fu
         fuᵢ .= 0
@@ -138,9 +128,9 @@ function regularize!(fu, reg::Reg{<:Any,<:Any,N}, fb) where {N}
         ib, i = Tuple(J)
         fuᵢ = fu[i]
         @loop fuᵢ (K in R) begin
-            I0 = CartesianIndex(Tuple(Is[ib, i] .- (s + 1)))
+            I0 = CartesianIndex(Tuple(reg.I[ib, i] .- (reg.delta.support + 1)))
             I = I0 + K
-            fuᵢ[I] += fb[J] * weights[K, ib, i]
+            fuᵢ[I] += fb[J] * reg.weights[K, ib, i]
         end
     end
 
