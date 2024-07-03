@@ -7,17 +7,17 @@ using AbstractFFTs: plan_fft, plan_rfft
 import AbstractFFTs
 import FFTW
 
-plan_r2r(A, args...; kw...) = _plan_r2r(get_backend(A), A, args...; kw...)
-_plan_r2r(::CPU, args...; kw...) = FFTW.plan_r2r(args...; kw...)
-_plan_r2r(dev, A, kind, args...; kw...) = bad_plan_r2r(A, Val(kind), args...; kw...)
+plan_r2r!(A, args...; kw...) = _plan_r2r!(get_backend(A), A, args...; kw...)
+_plan_r2r!(::CPU, args...; kw...) = FFTW.plan_r2r!(args...; kw...)
+_plan_r2r!(dev, A, kind, args...; kw...) = bad_plan_r2r!(A, Val(kind), args...; kw...)
 
 struct R2R{P<:Tuple}
     p::P
 end
 
-function bad_plan_r2r(A, kind::Tuple, dims::Tuple; kw...)
+function bad_plan_r2r!(A, kind::Tuple, dims::Tuple; kw...)
     @assert dims == ntuple(identity, ndims(A))
-    p = ntuple(i -> bad_plan_r2r(A, kind[i], i; kw...), ndims(A))
+    p = ntuple(i -> bad_plan_r2r!(A, kind[i], i; kw...), ndims(A))
     R2R(p)
 end
 
@@ -36,7 +36,7 @@ struct RODFT00{P<:AbstractFFTs.Plan,A<:AbstractArray,B<:AbstractArray}
     b::B
 end
 
-function bad_plan_r2r(A, ::Val{FFTW.RODFT00}, dims::Int; kw...)
+function bad_plan_r2r!(A, ::Val{FFTW.RODFT00}, dims::Int; kw...)
     s = size(A)
     a = similar(A, setindex(s, 2(s[dims] + 1), dims))
     b = similar(A, complex(eltype(A)), setindex(s, s[dims] + 2, dims))
@@ -66,7 +66,7 @@ struct REDFT10{P<:AbstractFFTs.Plan,A<:AbstractArray,B<:AbstractArray}
     b::B
 end
 
-function bad_plan_r2r(A, ::Val{FFTW.REDFT10}, dims::Int; kw...)
+function bad_plan_r2r!(A, ::Val{FFTW.REDFT10}, dims::Int; kw...)
     s = size(A)
     a = similar(A, setindex(s, 2s[dims], dims))
     b = similar(A, complex(eltype(A)), setindex(s, s[dims] + 1, dims))
@@ -96,7 +96,7 @@ struct REDFT01{P<:AbstractFFTs.Plan,A<:AbstractArray,B<:AbstractArray}
     b::B
 end
 
-function bad_plan_r2r(A, ::Val{FFTW.REDFT01}, dims::Int; kw...)
+function bad_plan_r2r!(A, ::Val{FFTW.REDFT01}, dims::Int; kw...)
     s = size(A)
     a = similar(A, complex(eltype(A)), setindex(s, 2s[dims], dims))
     b = similar(a)

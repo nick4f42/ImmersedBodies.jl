@@ -140,21 +140,17 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
         ]
         @testset "$(_kind_str(kind)) size=$sz" for (kind, sz, dimss) in params
             backend = _backend(array)
-            x1 = rand(sz...)
-            x2 = array(x1)
-            y1 = similar(x1)
-            y2 = similar(x2)
 
             for dims in dimss
-                y1 .= 0
-                y2 .= 1
+                x1 = rand(sz...)
+                x2 = array(x1)
 
-                p1 = FFTW.plan_r2r(x1, kind, dims)
-                p2 = FFT_R2R.bad_plan_r2r(x2, Val.(kind), dims)
+                p1 = FFTW.plan_r2r!(x1, kind, dims)
+                p2 = FFT_R2R.bad_plan_r2r!(x2, Val.(kind), dims)
 
-                mul!(y1, p1, x1)
-                mul!(y2, p2, x2)
-                @test y1 ≈ convert(Array, y2)
+                mul!(x1, p1, x1)
+                mul!(x2, p2, x2)
+                @test x1 ≈ convert(Array, x2)
             end
         end
     end
