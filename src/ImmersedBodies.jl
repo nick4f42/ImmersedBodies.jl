@@ -1,15 +1,18 @@
 module ImmersedBodies
 
+using LinearAlgebra
 using StaticArrays
 using OffsetArrays
+using OffsetArrays: no_offset_view
 using KernelAbstractions
 using EllipsisNotation
 import Adapt
+import FFTW
 
 export GridKind, Primal, Dual
 export AllAxes
 export GridLocation, Node, Edge, Loc_u, Loc_ω
-export Grid, gridcorner, gridstep, coord
+export Grid, gridcorner, gridstep, coord, cell_axes
 export IrrotationalFlow, UniformFlow
 export AbstractBody, PrescribedBody, StaticBody
 export IBProblem

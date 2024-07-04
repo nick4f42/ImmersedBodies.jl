@@ -2,10 +2,16 @@ using ImmersedBodies
 using ImmersedBodies:
     @loop,
     unit,
+    n_offset_tuple,
+    cell_axes,
+    inner_cell_axes,
     OffsetTuple,
     nonlinear!,
     rot!,
     curl!,
+    LaplacianPlan,
+    EigenbasisTransform,
+    laplacian_plans,
     delta_yang3_smooth1,
     Reg,
     update_weights!,
@@ -46,6 +52,11 @@ _curl(A) = SVector(A[3, 2] - A[2, 3], A[1, 3] - A[3, 1], A[2, 1] - A[1, 2])
 
 _kind_str(kind::Tuple) = string("(", join(FFTW.kind2string.(kind), ", "), ")")
 _kind_str(kind) = FFTW.kind2string(kind)
+
+function with_diagsum(a, s)
+    i = diagind(a)
+    setindex(a, s - sum(@view a[i[2:end]]), i[1])
+end
 
 arrays = [Array]
 CUDA.functional() && push!(arrays, CUDA.CuArray)
@@ -127,6 +138,23 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
                 (x0 - n * h / 2) + 2h * SVector(1.5, 3)
             @test coord(grid, Edge{Dual}(2), (1, 3), 2) ≈
                 (x0 - n * h / 2) + 2h * SVector(1, 3.5)
+
+            @test cell_axes(grid.n, Edge{Dual}(3)) == (0:8, 0:4)
+            @test inner_cell_axes(grid.n, Edge{Dual}(3)) == (1:7, 1:3)
+
+            @test cell_axes(grid.n, Edge{Primal}(1)) == (0:8, 0:3)
+            @test inner_cell_axes(grid.n, Edge{Primal}(1)) == (1:7, 0:3)
+        end
+        let h = 0.25,
+            n = SVector(8, 4, 12),
+            x0 = SVector(10, 19, 5),
+            grid = Grid(; h, n, x0, levels=5)
+
+            @test cell_axes(grid.n, Edge{Dual}(2)) == (0:8, 0:3, 0:12)
+            @test inner_cell_axes(grid.n, Edge{Dual}(2)) == (1:7, 0:3, 1:11)
+
+            @test cell_axes(grid.n, Edge{Primal}(2)) == (0:7, 0:4, 0:11)
+            @test inner_cell_axes(grid.n, Edge{Primal}(2)) == (0:7, 1:3, 0:11)
         end
     end
 
@@ -292,6 +320,42 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             u_got = curl!(similar.(u_expect), ψ; h=grid.h)
 
             @test all(@. no_offset_view(u_got) ≈ no_offset_view(u_expect))
+        end
+        @testset "2D Laplacian" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            ψ0 = @SArray(rand(3))
+            dψ = [@SArray(zeros(2, 2)); @SArray(rand(1, 2))]
+            ψ_true(x) = ψ0 + dψ * x
+
+            Rψ = inner_cell_axes(grid.n, Loc_ω(3))
+            Rψb = cell_axes(grid.n, Loc_ω(3))
+            Ru = ntuple(i -> inner_cell_axes(grid.n, Loc_u(i)), Val(2))
+
+            ψ = OffsetTuple{3}(_gridarray(ψ_true, grid, Loc_ω, (Rψb,); array, dims=(3,)))
+            for dim in 1:2, i in (Rψb[dim][begin], Rψb[dim][end])
+                R = CartesianIndices(setindex(Rψb, i:i, dim))
+                @loop ψ[3] (I in R) ψ[3][I] = 0
+            end
+
+            ψ_expect = OffsetTuple{3}((OffsetArray(ψ[3][Rψ...], Rψ),))
+            ψ_got = n_offset_tuple(ψ) do i
+                similar(ψ_expect[i])
+            end
+            u = ntuple(Val(2)) do i
+                dims = Ru[i]
+                OffsetArray(
+                    KernelAbstractions.zeros(backend, Float64, length.(dims)...), dims
+                )
+            end
+
+            curl!(u, ψ; h=grid.h)
+            rot!(ψ_got, u; h=grid.h)
+
+            plan = laplacian_plans(ψ_got, grid.n)
+            EigenbasisTransform(λ -> -1 / (λ / grid.h^2), plan)(ψ_got, ψ_got)
+
+            @test no_offset_view(ψ_got[3]) ≈ no_offset_view(ψ_expect[3])
         end
         @testset "regularize/interpolate" begin
             nb = 20

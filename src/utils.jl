@@ -6,9 +6,24 @@ struct OffsetTuple{O,T<:Tuple}
     OffsetTuple{O}(x::T) where {O,T} = new{O,T}(x)
 end
 
-Base.getindex(a::OffsetTuple{O}, i::Integer) where {O} = a.x[i-O+1]
+OffsetTuple(a::Tuple) = OffsetTuple{1}(a)
+OffsetTuple(a::OffsetTuple) = a
+
+const NOffsetTuple{N,O,T} = OffsetTuple{O,NTuple{N,T}}
+
+function n_offset_tuple(f, ::Val{N}, ::Val{O}) where {N,O}
+    OffsetTuple{O}(ntuple(i -> f(i - 1 + O), Val(N)))
+end
+
+n_offset_tuple(f, a::Tuple) = n_offset_tuple(f, Val(length(a)), Val(1))
+n_offset_tuple(f, a::OffsetTuple{O}) where {O} = n_offset_tuple(f, Val(length(a)), Val(O))
+
 Base.length(a::OffsetTuple) = length(a.x)
+Base.eachindex(a::OffsetTuple{O}) where {O} = (1:length(a)) .+ (O - 1)
+Base.getindex(a::OffsetTuple{O}, i::Integer) where {O} = a.x[i-O+1]
 Base.pairs(a::OffsetTuple{O}) where {O} = Base.Pairs(a, ntuple(i -> i - 1 + O, length(a)))
+
+Base.map(f, a::OffsetTuple{O}) where {O} = OffsetTuple{O}(map(f, a.x))
 
 function Adapt.adapt_structure(to, a::OffsetTuple{O}) where {O}
     OffsetTuple{O}(Adapt.adapt_structure(to, a.x))

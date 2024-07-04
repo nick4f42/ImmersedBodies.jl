@@ -9,15 +9,14 @@ import FFTW
 
 plan_r2r!(A, args...; kw...) = _plan_r2r!(get_backend(A), A, args...; kw...)
 _plan_r2r!(::CPU, args...; kw...) = FFTW.plan_r2r!(args...; kw...)
-_plan_r2r!(dev, A, kind, args...; kw...) = bad_plan_r2r!(A, Val(kind), args...; kw...)
+_plan_r2r!(dev, A, kind, args...; kw...) = bad_plan_r2r!(A, Val.(kind), args...; kw...)
 
 struct R2R{P<:Tuple}
     p::P
 end
 
-function bad_plan_r2r!(A, kind::Tuple, dims::Tuple; kw...)
-    @assert dims == ntuple(identity, ndims(A))
-    p = ntuple(i -> bad_plan_r2r!(A, kind[i], i; kw...), ndims(A))
+function bad_plan_r2r!(A, kind::Tuple, dims::Tuple=ntuple(identity, ndims(A)); kw...)
+    p = ntuple(i -> bad_plan_r2r!(A, kind[i], dims[i]; kw...), ndims(A))
     R2R(p)
 end
 

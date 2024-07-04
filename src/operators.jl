@@ -42,6 +42,72 @@ function curl(i, ψ, I; h)
     end
 end
 
+struct LaplacianPlan{P1,P2,L<:AbstractArray}
+    λ::L
+    fwd::P1
+    inv::P2
+    n_logical::Int
+end
+
+function LaplacianPlan(ωᵢ, i, n::SVector{N}) where {N}
+    R = inner_cell_axes(n, Loc_ω(i))
+    nω = length.(R)
+    λ = OffsetArray(similar(ωᵢ, nω), R)
+    laplacian_eigvals!(λ, i)
+
+    kind = laplacian_fft_kind(i, N)
+    fwd = FFT_R2R.plan_r2r!(ωᵢ, kind)
+    inv = FFT_R2R.plan_r2r!(ωᵢ, map(k -> FFTW.inv_kind[k], kind))
+    n_logical = prod(map(FFTW.logical_size, nω, kind))
+
+    LaplacianPlan(λ, fwd, inv, n_logical)
+end
+
+laplacian_fft_kind(i, nd) = ntuple(j -> i == j ? FFTW.REDFT01 : FFTW.RODFT00, nd)
+
+function laplacian_eigvals!(λ, i)
+    nd = ndims(λ)
+    R = CartesianIndices(λ)
+    n = size(λ)
+    @loop λ (I in R) begin
+        I₁ = Tuple(I - first(R)) .+ 1
+        s = zero(eltype(λ))
+        for j in 1:nd
+            s += if (i == j)
+                -4 * sin(π * (I₁[j] - 1) / (2n[j]))^2
+            else
+                -4 * sin(π * I₁[j] / (2(n[j] + 1)))^2
+            end
+        end
+        λ[I] = s
+    end
+    λ
+end
+
+laplacian_plans(ω, n) = n_offset_tuple(i -> LaplacianPlan(ω[i], i, n), ω)
+
+struct EigenbasisTransform{F,N,O,P<:LaplacianPlan}
+    f::F
+    plan::NOffsetTuple{N,O,P}
+end
+
+function (X::EigenbasisTransform)(y, ω)
+    for i in eachindex(ω)
+        X(y[i], ω[i], i)
+    end
+    y
+end
+
+function (X::EigenbasisTransform)(yᵢ, ωᵢ, i)
+    plan = X.plan[i]
+    let yᵢ = no_offset_view(yᵢ), ωᵢ = no_offset_view(ωᵢ)
+        mul!(yᵢ, plan.inv, ωᵢ)
+        @. yᵢ *= X.f(plan.λ) / plan.n_logical
+        mul!(yᵢ, plan.fwd, yᵢ)
+    end
+    yᵢ
+end
+
 struct DeltaFunc{F}
     f::F
     support::Int

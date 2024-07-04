@@ -46,6 +46,18 @@ coord(grid, loc, I, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
 _cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N)) / 2
 _cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N)) / 2
 
+function cell_axes(n::SVector{N}, loc) where {N}
+    ntuple(j -> _on_bndry(loc, j) ? (0:n[j]) : (0:n[j]-1), Val(N))
+end
+
+function inner_cell_axes(n::SVector{N}, loc) where {N}
+    a = cell_axes(n, loc)
+    ntuple(j -> _on_bndry(loc, j) ? a[j][2:end-1] : a[j], Val(N))
+end
+
+_on_bndry((; i)::Edge{Primal}, j) = i == j
+_on_bndry((; i)::Edge{Dual}, j) = i ≠ j
+
 """
     IrrotationalFlow
 
