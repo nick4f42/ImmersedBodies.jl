@@ -480,19 +480,20 @@ function (coupler::DeformingSurfaceCoupler)(state::StatePsiOmegaGridCNAB, qs)
         @. ζ_k = -ζ + 2 / dt * (χ_k - χ)
         @. ζdot_k = 4 / dt^2 * (χ_k - χ) - 4 / dt * ζ - ζdot
 
+        update!(ops, prob.bodies, panels, deform_k)
+
         # Update the body panels that interface with the fluid
         for (op, i) in zip(ops.perbody, prob.bodies.deforming)
             body = prob.bodies[i.i_body]
             bodypanels = panels.perbody[i.i_body]
-            stru2fluid = structure_to_fluid_offset(op)
 
-            mul!(vec(bodypanels.pos), stru2fluid, χ_k)
+            structure_to_fluid_position(op)(vec(bodypanels.pos), χ_k)
             bodypanels.pos .+= reference_pos(body)
 
             # Recalculate segment lengths based on positions
             recalculate_lengths!(bodypanels)
 
-            mul!(vec(bodypanels.vel), stru2fluid, ζ_k)
+            mul!(vec(bodypanels.vel), structure_to_fluid_offset(op), ζ_k)
         end
     end
 

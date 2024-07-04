@@ -200,11 +200,12 @@ function update!(
     return false # indicate no changes
 end
 
-struct SpringedMembraneOps{L1,L2} <: StructureOps
+struct SpringedMembraneOps{L1,L2,L3} <: StructureOps
     M::Matrix{Float64}
     K::Matrix{Float64}
     spring_to_fluid_offset::L1
     fluid_to_spring_force::L2
+    spring_to_fluid_pos::L3
 end
 
 mass_matrix(ops::SpringedMembraneOps) = ops.M
@@ -212,6 +213,7 @@ stiff_matrix(ops::SpringedMembraneOps) = ops.K
 
 structure_to_fluid_offset(ops::SpringedMembraneOps) = ops.spring_to_fluid_offset
 fluid_to_structure_force(ops::SpringedMembraneOps) = ops.fluid_to_spring_force
+structure_to_fluid_position(ops::SpringedMembraneOps) = ops.spring_to_fluid_pos
 
 function structure_ops(body::SpringedMembrane, panels::PanelView)
     n_spring = length(body.m)
@@ -238,7 +240,18 @@ function structure_ops(body::SpringedMembrane, panels::PanelView)
         return f_spring
     end
 
-    return SpringedMembraneOps(M, K, spring_to_fluid_offset, fluid_to_spring_force)
+    function spring_to_fluid_pos(dx_body, dx_spring)
+        k = dx_spring[end]
+        dx = reshape(dx_body, :, 2)
+        _, pts = PointSpacing.distribute_points(body.deformed(k); n=size(dx, 1))
+        for I in CartesianIndices(dx)
+            i, j = Tuple(I)
+            dx[I] = pts[i][j] - body.xref[i,j]
+        end
+        dx_body
+    end
+
+    return SpringedMembraneOps(M, K, spring_to_fluid_offset, fluid_to_spring_force, spring_to_fluid_pos)
 end
 
 function init!(
@@ -267,7 +280,15 @@ function init!(
 end
 
 function update!(
-    ::SpringedMembraneOps, ::SpringedMembrane, ::PanelView, ::DeformationStateView
+    ops::SpringedMembraneOps, body::SpringedMembrane, ::PanelView, deform_k::DeformationStateView
 )
+    k = deform_k.χ[end]
+
+    vel = material_pt_velocity(body.deformed, k; s_undef_end=body.s_undef_end)
+    ts = range(0, 1, size(body.deform_weights, 1))
+    for i in axes(body.deform_weights, 1)
+        body.deform_weights[i, :] = vel(ts[i])
+    end
+
     return false # indicate no changes
 end

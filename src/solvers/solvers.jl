@@ -3,6 +3,7 @@ module Solvers
 using ...ImmersedBodies
 using ...ImmersedBodies.Bodies
 using ...ImmersedBodies.Quantities
+using ...ImmersedBodies.PointSpacing
 import ...ImmersedBodies: advance!, solve!, statetype, solvertype, _show
 import ...ImmersedBodies: gridstep, default_gridstep, body_segment_length
 import ...ImmersedBodies: timevalue, timeindex, timestep_scheme, conditions, discretized

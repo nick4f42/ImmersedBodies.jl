@@ -3,6 +3,7 @@ module Bodies
 using ..ImmersedBodies
 using ..ImmersedBodies.Dynamics
 using ..ImmersedBodies.Curves
+using ..ImmersedBodies.PointSpacing
 import ..ImmersedBodies: _show
 
 using LinearAlgebra
@@ -272,7 +273,9 @@ function _show(io::IO, body::EulerBernoulliBeam, prefix)
     return nothing
 end
 
-struct SpringedMembrane <: DeformingBody
+struct SpringedMembrane{F} <: DeformingBody
+    deformed::F
+    s_undef_end::Float64
     xref::Matrix{Float64} # Reference position of membrane
     ds0::Vector{Float64} # Lengths at each membrane reference position
     normals::Matrix{Float64} # Normals at each point in membrane
@@ -293,12 +296,15 @@ initial_lengths!(ds, body::SpringedMembrane) = ds .= body.ds0
 npanels(body::SpringedMembrane) = length(body.ds0)
 
 function SpringedMembrane(
-    segments::Segments;
+    curve;
+    ds,
     m::AbstractVector{Float64},
     k::AbstractVector{Float64},
     kg::AbstractVector{Float64},
     align_normal,
 )
+    segments = partition(ParameterizedCurve(curve), ds)
+
     xref = segments.points
     ds0 = segments.lengths
 
@@ -342,14 +348,15 @@ function SpringedMembrane(
     spring_normal = SVector{2}(@view normals[end ÷ 2, :])
 
     deform_weights = zeros(nb, 2)
-    for i in 1:nb
-        nx, ny = @view normals[i, :]
-        weight = membrane_distribution(r[i])
-        deform_weights[i, 1] = nx * weight
-        deform_weights[i, 2] = ny * weight
+
+    s_undef_end = PointSpacing.arclength(curve; sample=500)
+    function deformed(k)
+        function(t)
+            SVector(curve(t)) + k * spring_normal * membrane_distribution(2t-1)
+        end
     end
 
-    return SpringedMembrane(xref, ds0, normals, deform_weights, spring_normal, m, k, kg)
+    return SpringedMembrane(deformed, s_undef_end, xref, ds0, normals, deform_weights, spring_normal, m, k, kg)
 end
 
 membrane_distribution(x) = exp(-(3x)^2 / 2)

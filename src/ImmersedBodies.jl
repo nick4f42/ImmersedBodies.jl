@@ -33,6 +33,9 @@ export FreestreamFlow, PsiOmegaFluidGrid, UniformGrid, MultiLevelGrid
 
 _show(io::IO, x) = _show(io, x, "")
 
+include("point-spacing.jl")
+using .PointSpacing
+
 include("dynamics.jl")
 using .Dynamics
 
