@@ -324,7 +324,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
         @testset "2D Laplacian" begin
             grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
 
-            ψ0 = @SArray(rand(3))
+            ψ0 = [@SArray(zeros(2)); rand()]
             dψ = [@SArray(zeros(2, 2)); @SArray(rand(1, 2))]
             ψ_true(x) = ψ0 + dψ * x
 
@@ -356,6 +356,42 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             EigenbasisTransform(λ -> -1 / (λ / grid.h^2), plan)(ψ_got, ψ_got)
 
             @test no_offset_view(ψ_got[3]) ≈ no_offset_view(ψ_expect[3])
+        end
+        @testset "3D Laplacian" begin
+            grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
+
+            ψ0 = @SArray(rand(3))
+            dψ = with_diagsum(@SArray(rand(3, 3)), 0)
+            ψ_true(x) = ψ0 + dψ * x
+
+            Rψ = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
+            Rψb = ntuple(i -> cell_axes(grid.n, Loc_ω(i)), 3)
+            Ru = ntuple(i -> inner_cell_axes(grid.n, Loc_u(i)), 3)
+
+            ψ = _gridarray(ψ_true, grid, Loc_ω, Rψb; array)
+            for i in 1:3, j in 1:3, k in (Rψb[i][j][begin], Rψb[i][j][end])
+                R = CartesianIndices(setindex(Rψb[i], k:k, j))
+                if i ≠ j
+                    @loop ψ[i] (I in R) ψ[i][I] = 0
+                end
+            end
+
+            ψ_expect = ntuple(i -> OffsetArray(ψ[i][Rψ[i]...], Rψ[i]), 3)
+            ψ_got = map(similar, ψ_expect)
+            u = ntuple(3) do i
+                dims = Ru[i]
+                OffsetArray(
+                    KernelAbstractions.zeros(backend, Float64, length.(dims)...), dims
+                )
+            end
+
+            curl!(u, ψ; h=grid.h)
+            rot!(ψ_got, u; h=grid.h)
+
+            plan = laplacian_plans(ψ_got, grid.n)
+            EigenbasisTransform(λ -> -1 / (λ / grid.h^2), plan)(ψ_got, ψ_got)
+
+            @test all(@. no_offset_view(ψ_got) ≈ no_offset_view(ψ_expect))
         end
         @testset "regularize/interpolate" begin
             nb = 20

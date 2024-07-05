@@ -9,8 +9,6 @@ end
 OffsetTuple(a::Tuple) = OffsetTuple{1}(a)
 OffsetTuple(a::OffsetTuple) = a
 
-const NOffsetTuple{N,O,T} = OffsetTuple{O,NTuple{N,T}}
-
 function n_offset_tuple(f, ::Val{N}, ::Val{O}) where {N,O}
     OffsetTuple{O}(ntuple(i -> f(i - 1 + O), Val(N)))
 end

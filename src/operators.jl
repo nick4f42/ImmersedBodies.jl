@@ -86,9 +86,9 @@ end
 
 laplacian_plans(ω, n) = n_offset_tuple(i -> LaplacianPlan(ω[i], i, n), ω)
 
-struct EigenbasisTransform{F,N,O,P<:LaplacianPlan}
+struct EigenbasisTransform{F,O,P<:Tuple{Vararg{LaplacianPlan}}}
     f::F
-    plan::NOffsetTuple{N,O,P}
+    plan::OffsetTuple{O,P}
 end
 
 function (X::EigenbasisTransform)(y, ω)
@@ -100,9 +100,9 @@ end
 
 function (X::EigenbasisTransform)(yᵢ, ωᵢ, i)
     plan = X.plan[i]
-    let yᵢ = no_offset_view(yᵢ), ωᵢ = no_offset_view(ωᵢ)
+    let yᵢ = no_offset_view(yᵢ), ωᵢ = no_offset_view(ωᵢ), λ = no_offset_view(plan.λ)
         mul!(yᵢ, plan.inv, ωᵢ)
-        @. yᵢ *= X.f(plan.λ) / plan.n_logical
+        @. yᵢ *= X.f(λ) / plan.n_logical
         mul!(yᵢ, plan.fwd, yᵢ)
     end
     yᵢ
