@@ -108,6 +108,55 @@ function (X::EigenbasisTransform)(yᵢ, ωᵢ, i)
     yᵢ
 end
 
+function coarsen!(ω², ω¹; n)
+    for i in eachindex(ω²)
+        R = _coarse_indices(Tuple(n), Loc_ω(i))
+        @loop ω²[i] (I in R) ω²[i][I] = coarsen(i, ω¹[i], I; n)
+    end
+    ω²
+end
+
+function _coarse_indices(n::NTuple{N}, loc::Edge{Dual}) where {N}
+    ntuple(N) do i
+        n4 = n[i] .÷ 4
+        i == loc.i ? (n4:3n4-1) : (n4+1:3n4-1)
+    end
+end
+
+function coarsen(i, ωᵢ, I²; n)
+    T = eltype(ωᵢ)
+    stencil = _coarsen_stencil(T)
+    s = zero(T)
+    indices = _fine_indices(i, Tuple(n), Tuple(I²))
+    for I¹ in indices
+        s += dot(SMatrix{3,3}(@view ωᵢ[I¹]), stencil)
+    end
+    s / length(indices)
+end
+
+function _coarsen_stencil(T)
+    (@SMatrix [
+        1 2 1
+        2 4 2
+        1 2 1
+    ]) / T(16)
+end
+
+_fine_indices(_, n::NTuple{2}, I::NTuple{2}) = (CartesianIndices(_fine_range.(n, I)),)
+
+function _fine_indices(i, n::NTuple{3}, I::NTuple{3})
+    plane1 = 2(I[i] - (n[i] ÷ 4))
+    r = _fine_range.(n, I)
+    ntuple(2) do plane
+        j = plane1 + plane - 1
+        CartesianIndices(setindex(r, j:j, i))
+    end
+end
+
+function _fine_range(n::Int, I::Int)
+    2(I - (n ÷ 4)) .+ (-1:1)
+end
+
 struct DeltaFunc{F}
     f::F
     support::Int

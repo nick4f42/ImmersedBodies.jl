@@ -12,6 +12,7 @@ using ImmersedBodies:
     LaplacianPlan,
     EigenbasisTransform,
     laplacian_plans,
+    coarsen!,
     delta_yang3_smooth1,
     Reg,
     update_weights!,
@@ -32,12 +33,18 @@ import CUDA, AMDGPU
 _backend(array) = get_backend(array([0]))
 
 function _gridarray(
-    f, grid, loc, R::NTuple{N,CartesianIndices}; array=identity, dims=ntuple(identity, N)
+    f,
+    grid,
+    loc,
+    R::NTuple{N,CartesianIndices};
+    array=identity,
+    dims=ntuple(identity, N),
+    level=1,
 ) where {N}
     map(dims, R) do i, r
         OffsetArray(array(
             map(r) do I
-                x = coord(grid, loc(i), I)
+                x = coord(grid, loc(i), I, level)
                 f(x)[i]
             end,
         ), r)
@@ -392,6 +399,55 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             EigenbasisTransform(λ -> -1 / (λ / grid.h^2), plan)(ψ_got, ψ_got)
 
             @test all(@. no_offset_view(ψ_got) ≈ no_offset_view(ψ_expect))
+        end
+        @testset "2D coarsen" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            ω0 = [@SArray(zeros(2)); rand()]
+            dω = [@SArray(zeros(2, 2)); @SArray(rand(1, 2))]
+            ω_true(x) = ω0 + dω * x
+
+            R = inner_cell_axes(grid.n, Loc_ω(3))
+            ω¹ = OffsetTuple{3}(
+                _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=(3,), level=1)
+            )
+            ω²_expect = OffsetTuple{3}(
+                _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=(3,), level=2)
+            )
+            ω²_got = map(copy, ω²_expect)
+
+            R_inner = CartesianIndices(map(n -> (n÷4+1):(3n÷4-1), Tuple(grid.n)))
+            @loop ω²_got[3] (I in R_inner) ω²_got[3][I] = 0
+
+            coarsen!(ω²_got, ω¹; n=grid.n)
+
+            @test no_offset_view(ω²_got[3]) ≈ no_offset_view(ω²_expect[3])
+        end
+        @testset "3D coarsen" begin
+            grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
+
+            ω0 = @SArray(rand(3))
+            dω = @SArray(rand(3, 3))
+            ω_true(x) = ω0 + dω * x
+
+            R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
+            ω¹ = _gridarray(ω_true, grid, Loc_ω, R; array, level=1)
+            ω²_expect = _gridarray(ω_true, grid, Loc_ω, R; array, level=2)
+            ω²_got = map(copy, ω²_expect)
+
+            for i in 1:3
+                R_inner = CartesianIndices(
+                    ntuple(3) do j
+                        n4 = grid.n[j] ÷ 4
+                        i == j ? (n4:3n4-1) : (n4+1:3n4-1)
+                    end,
+                )
+                @loop ω²_got[i] (I in R_inner) ω²_got[i][I] = 0
+            end
+
+            coarsen!(ω²_got, ω¹; n=grid.n)
+
+            @test all(@. no_offset_view(ω²_got) ≈ no_offset_view(ω²_expect))
         end
         @testset "regularize/interpolate" begin
             nb = 20
