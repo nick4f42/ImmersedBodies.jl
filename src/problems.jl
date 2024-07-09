@@ -58,6 +58,24 @@ end
 _on_bndry((; i)::Edge{Primal}, j) = i == j
 _on_bndry((; i)::Edge{Dual}, j) = i ≠ j
 
+function boundary_axes(n::SVector{N}, loc::Edge) where {N}
+    a = cell_axes(n, loc)
+    (SArray ∘ map)(CartesianIndices(SOneTo.((2, N)))) do index
+        dir, j = Tuple(index)
+        if _on_bndry(loc, j)
+            let Iⱼ = (a[j][begin], a[j][end])[dir]
+                CartesianIndices(setindex(a, Iⱼ:Iⱼ, j))
+            end
+        else
+            CartesianIndices(ntuple(_ -> 1:0, N))
+        end
+    end
+end
+
+function boundary_axes(n::SVector{N}, loc::Type{<:Edge}; dims=ntuple(identity, N)) where {N}
+    map(i -> boundary_axes(n, loc(i)), dims)
+end
+
 """
     IrrotationalFlow
 

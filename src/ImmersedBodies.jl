@@ -2,6 +2,7 @@ module ImmersedBodies
 
 using LinearAlgebra
 using StaticArrays
+using StaticArrays: SOneTo
 using OffsetArrays
 using OffsetArrays: no_offset_view
 using KernelAbstractions

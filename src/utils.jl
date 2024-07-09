@@ -32,9 +32,16 @@ struct VecZ end
 vec_kind(x::Tuple) = Vec()
 vec_kind(x::OffsetTuple{3,<:NTuple{1}}) = VecZ()
 
-function permute(f, i::Int)
+function otheraxes(i)
     j = i % 3 + 1
     k = (i + 1) % 3 + 1
+    (j, k)
+end
+
+each_other_axes(i) = (otheraxes(i), reverse(otheraxes(i)))
+
+function permute(f, i::Int)
+    (j, k) = otheraxes(i)
     f(j, k) - f(k, j)
 end
 

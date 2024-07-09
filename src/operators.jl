@@ -157,6 +157,44 @@ function _fine_range(n::Int, I::Int)
     2(I - (n ÷ 4)) .+ (-1:1)
 end
 
+function interpolate_grid_bndry!(ω_b, ω; n)
+    for i in eachindex(ω), (j, k) in each_other_axes(i), dir in 1:2
+        b = ω_b[i][dir, k]
+        @loop b (I in b) b[I] = interpolate_grid_bndry(ω[i], (i, j, k), dir, I; n)
+    end
+    ω_b
+end
+
+function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{2}; n)
+    δ = unit(2)
+    I² = CartesianIndex(ntuple(dim -> n[dim] ÷ 4 + fld(I¹[dim], 2), 2))
+    if iseven(I¹[j])
+        ωᵢ[I²]
+    else
+        (ωᵢ[I²] + ωᵢ[I²+δ(j)]) / 2
+    end
+end
+
+function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{3}; n)
+    δ = unit(3)
+    n4 = Tuple(n) .÷ 4
+    I² = CartesianIndex(
+        ntuple(3) do dim
+            if dim == i
+                n4[dim] + fld(I¹[dim] - 1, 2)
+            else
+                n4[dim] + fld(I¹[dim], 2)
+            end
+        end,
+    )
+    a = (1 + 2mod(I¹[i] + 1, 2)) / 4
+    if iseven(I¹[j])
+        (1 - a) * ωᵢ[I²] + a * ωᵢ[I²+δ(i)]
+    else
+        ((1 - a) * (ωᵢ[I²] + ωᵢ[I²+δ(j)]) + a * (ωᵢ[I²+δ(i)] + ωᵢ[I²+δ(i)+δ(j)])) / 2
+    end
+end
+
 struct DeltaFunc{F}
     f::F
     support::Int
@@ -220,7 +258,7 @@ function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
     reg
 end
 
-function interpolate!(ub::AbstractMatrix, reg::Reg, u)
+function interpolate_body!(ub::AbstractMatrix, reg::Reg, u)
     s = reg.delta.support
     @loop ub (J in ub) begin
         ib, i = Tuple(J)

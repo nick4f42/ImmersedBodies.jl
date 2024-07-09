@@ -5,6 +5,7 @@ using ImmersedBodies:
     n_offset_tuple,
     cell_axes,
     inner_cell_axes,
+    boundary_axes,
     OffsetTuple,
     nonlinear!,
     rot!,
@@ -13,15 +14,17 @@ using ImmersedBodies:
     EigenbasisTransform,
     laplacian_plans,
     coarsen!,
+    interpolate_grid_bndry!,
     delta_yang3_smooth1,
     Reg,
     update_weights!,
-    interpolate!,
+    interpolate_body!,
     regularize!
 using KernelAbstractions
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
 using StaticArrays
+using StaticArrays: SOneTo
 using LinearAlgebra
 using Test
 
@@ -400,7 +403,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
             @test all(@. no_offset_view(ψ_got) ≈ no_offset_view(ψ_expect))
         end
-        @testset "2D coarsen" begin
+        @testset "2D multi-domain coarsen" begin
             grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
 
             ω0 = [@SArray(zeros(2)); rand()]
@@ -423,7 +426,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
             @test no_offset_view(ω²_got[3]) ≈ no_offset_view(ω²_expect[3])
         end
-        @testset "3D coarsen" begin
+        @testset "3D multi-domain coarsen" begin
             grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
 
             ω0 = @SArray(rand(3))
@@ -449,6 +452,61 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
             @test all(@. no_offset_view(ω²_got) ≈ no_offset_view(ω²_expect))
         end
+        @testset "2D multi-domain interpolate" begin
+            grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3)
+
+            ω0 = [@SArray(zeros(2)); rand()]
+            dω = [@SArray(zeros(2, 2)); @SArray(rand(1, 2))]
+            ω_true(x) = ω0 + dω * x
+
+            Rb = boundary_axes(grid.n, Loc_ω; dims=3)
+            R = inner_cell_axes(grid.n, Loc_ω(3))
+            ω = OffsetTuple{3}(
+                _gridarray(ω_true, grid, Loc_ω, (R,); array, dims=(3,), level=2)
+            )
+            ω_b_expect = OffsetTuple{3}((
+                (SArray ∘ map)(CartesianIndices(Rb)) do index
+                    dir, j = Tuple(index)
+                    _gridarray(
+                        ω_true, grid, Loc_ω, (Rb[dir, j],); array, dims=(3,), level=1
+                    )[1]
+                end,
+            ))
+            ω_b_got = map(copy, ω_b_expect)
+
+            interpolate_grid_bndry!(ω_b_got, ω; n=grid.n)
+
+            @test all(@. no_offset_view(ω_b_got[3]) ≈ no_offset_view(ω_b_expect[3]))
+        end
+        @testset "3D multi-domain interpolate" begin
+            grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3)
+
+            ω0 = @SArray(rand(3))
+            dω = @SArray(rand(3, 3))
+            ω_true(x) = ω0 + dω * x
+
+            Rb = boundary_axes(grid.n, Loc_ω)
+            R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
+
+            ω = _gridarray(ω_true, grid, Loc_ω, R; array, level=2)
+            ω_b_expect = ntuple(3) do i
+                (SArray ∘ map)(CartesianIndices(Rb[i])) do index
+                    dir, j = Tuple(index)
+                    _gridarray(
+                        ω_true, grid, Loc_ω, (Rb[i][dir, j],); array, dims=(i,), level=1
+                    )[1]
+                end
+            end
+
+            ω_b_got = ntuple(i -> map(zero, ω_b_expect[i]), 3)
+
+            interpolate_grid_bndry!(ω_b_got, ω; n=grid.n)
+
+            @test all(
+                all(@. no_offset_view(ω_b_got[i]) ≈ no_offset_view(ω_b_expect[i])) for
+                i in 1:3
+            )
+        end
         @testset "regularize/interpolate" begin
             nb = 20
             xb = array([SVector(cos(t), sin(t)) for t in range(0, 2π, nb)])
@@ -469,7 +527,7 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
 
                 ub_expect = permutedims(stack(u_true.(Array(xb))))
                 ub_got = KernelAbstractions.zeros(backend, T, nb, 2)
-                interpolate!(ub_got, reg, u)
+                interpolate_body!(ub_got, reg, u)
 
                 @test Array(ub_got) ≈ ub_expect
             end
