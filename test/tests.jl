@@ -47,15 +47,23 @@ function _gridarray(f, array, grid, loc, R::Tuple{Vararg{AbstractRange}}; level=
     OffsetArray(convert(array, a), R)
 end
 
+_loc_axes(::Val{N}, loc::Type{<:Edge}) where {N} = ntuple(identity, N)
+_loc_axes(::Val{2}, loc::Type{Edge{Dual}}) = OffsetTuple{3}((3,))
+
 function _gridarray(f, array, grid::Grid{N}, loc::Type{<:Edge}, R; kw...) where {N}
-    ntuple(N) do i
+    map(_loc_axes(Val(N), loc)) do i
         _gridarray(x -> f(x)[i], array, grid, loc(i), R[i]; kw...)
     end
 end
 
-function _gridarray(f, array, grid::Grid{2}, loc::Type{Edge{Dual}}, R; kw...)
-    a = _gridarray(x -> f(x)[3], array, grid, loc(3), R[3]; kw...)
-    OffsetTuple{3}((a,))
+function _boundary_array(f, array, grid::Grid{N}, loc; kw...) where {N}
+    Rb = boundary_axes(grid.n, loc; dims=ntuple(identity, 3))
+    map(_loc_axes(Val(N), loc)) do i
+        (SArray ∘ map)(CartesianIndices(Rb[i])) do index
+            dir, j = Tuple(index)
+            _gridarray(x -> f(x)[i], array, grid, loc(i), Rb[i][dir, j]; kw...)
+        end
+    end
 end
 
 struct LinearFunc{N,T,M}
@@ -473,13 +481,7 @@ function test_multidomain_interpolate(array, grid::Grid{N}, ω_true::LinearFunc{
 
     ω = _gridarray(ω_true, array, grid, Loc_ω, R; level=2)
 
-    ω_b_expect = map(tupleindices(ω)) do i
-        (SArray ∘ map)(CartesianIndices(Rb[i])) do index
-            dir, j = Tuple(index)
-            _gridarray(x -> ω_true(x)[i], array, grid, Loc_ω(i), Rb[i][dir, j]; level=1)
-        end
-    end
-
+    ω_b_expect = _boundary_array(ω_true, array, grid, Loc_ω; level=1)
     ω_b_got = map(a -> map(zero, a), ω_b_expect)
 
     multidomain_interpolate!(ω_b_got, ω; n=grid.n)
@@ -489,7 +491,7 @@ function test_multidomain_interpolate(array, grid::Grid{N}, ω_true::LinearFunc{
         eachindex(ω_b_got),
     )
 
-    (; R, Rb, ω, ω_b_expect, ω_b_got)
+    (; R, ω, ω_b_expect, ω_b_got)
 end
 
 function test_multidomain_interpolate(array, ::Val{2})
