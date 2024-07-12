@@ -84,12 +84,14 @@ function laplacian_eigvals!(λ, i)
     λ
 end
 
-laplacian_plans(ω, n) = n_offset_tuple(i -> LaplacianPlan(ω[i], i, n), ω)
+laplacian_plans(ω, n) = map(i -> LaplacianPlan(ω[i], i, n), tupleindices(ω))
 
 struct EigenbasisTransform{F,O,P<:Tuple{Vararg{LaplacianPlan}}}
     f::F
     plan::OffsetTuple{O,P}
 end
+
+EigenbasisTransform(f, plan::Tuple) = EigenbasisTransform(f, OffsetTuple(plan))
 
 function (X::EigenbasisTransform)(y, ω)
     for i in eachindex(ω)
@@ -195,15 +197,14 @@ function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{3}; n
     end
 end
 
-struct DeltaFunc{F}
-    f::F
-    support::Int
-end
+abstract type AbstractDeltaFunc end
 
-(delta::DeltaFunc)(r::Real) = delta.f(r)
-(delta::DeltaFunc)(r) = prod(delta.f, r)
+(delta::AbstractDeltaFunc)(r::AbstractVector) = prod(delta, r)
 
-const delta_yang3_smooth1 = DeltaFunc(2) do r::AbstractFloat
+struct DeltaYang3S <: AbstractDeltaFunc end
+support(::DeltaYang3S) = 2
+
+function (::DeltaYang3S)(r::AbstractFloat)
     u = one(r)
     a = abs(r)
     if a < 1
@@ -220,20 +221,20 @@ const delta_yang3_smooth1 = DeltaFunc(2) do r::AbstractFloat
     end
 end
 
-struct Reg{F,T,N,A<:AbstractArray{SVector{N,Int},2},M,W<:AbstractArray{T,M}}
-    delta::DeltaFunc{F}
+struct Reg{D<:AbstractDeltaFunc,T,N,A<:AbstractArray{SVector{N,Int},2},M,W<:AbstractArray{T,M}}
+    delta::D
     I::A
     weights::W
 end
 
 Adapt.@adapt_structure Reg
 
-function Reg(backend, T, delta::DeltaFunc, nb, ::Val{N}) where {N}
+function Reg(backend, T, delta, nb, ::Val{N}) where {N}
     I = KernelAbstractions.zeros(backend, SVector{N,Int}, nb, N)
 
-    s = delta.support
-    support = ntuple(_ -> length(-s:s), N)
-    weights = KernelAbstractions.zeros(backend, T, support..., nb, N)
+    s = support(delta)
+    r = ntuple(_ -> length(-s:s), N)
+    weights = KernelAbstractions.zeros(backend, T, r..., nb, N)
 
     Reg(delta, I, weights)
 end
@@ -249,7 +250,7 @@ function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
             reg.I[ib, i] = I = @. round(Int, (xb - xu0) / grid.h)
 
             for k in CartesianIndices(axes(reg.weights)[1:N])
-                ΔI = (-reg.delta.support - 1) .+ SVector(Tuple(k))
+                ΔI = (-support(reg.delta) - 1) .+ SVector(Tuple(k))
                 xu = coord(grid, Loc_u(i), I + ΔI)
                 reg.weights[k, ib, i] = reg.delta((xb - xu) / grid.h)
             end
@@ -259,7 +260,7 @@ function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
 end
 
 function interpolate_body!(ub::AbstractMatrix, reg::Reg, u)
-    s = reg.delta.support
+    s = support(reg.delta)
     @loop ub (J in ub) begin
         ib, i = Tuple(J)
         w = @view reg.weights[.., ib, i]
@@ -281,7 +282,7 @@ function regularize!(fu, reg::Reg{<:Any,<:Any,N}, fb) where {N}
         ib, i = Tuple(J)
         fuᵢ = fu[i]
         @loop fuᵢ (K in R) begin
-            I0 = CartesianIndex(Tuple(reg.I[ib, i] .- (reg.delta.support + 1)))
+            I0 = CartesianIndex(Tuple(reg.I[ib, i] .- (support(reg.delta) + 1)))
             I = I0 + K
             fuᵢ[I] += fb[J] * reg.weights[K, ib, i]
         end

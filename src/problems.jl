@@ -64,10 +64,10 @@ function boundary_axes(n::SVector{N}, loc::Edge) where {N}
         dir, j = Tuple(index)
         if _on_bndry(loc, j)
             let Iⱼ = (a[j][begin], a[j][end])[dir]
-                CartesianIndices(setindex(a, Iⱼ:Iⱼ, j))
+                setindex(a, Iⱼ:Iⱼ, j)
             end
         else
-            CartesianIndices(ntuple(_ -> 1:0, N))
+            ntuple(_ -> 1:0, N)
         end
     end
 end

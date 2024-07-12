@@ -9,17 +9,17 @@ end
 OffsetTuple(a::Tuple) = OffsetTuple{1}(a)
 OffsetTuple(a::OffsetTuple) = a
 
-function n_offset_tuple(f, ::Val{N}, ::Val{O}) where {N,O}
-    OffsetTuple{O}(ntuple(i -> f(i - 1 + O), Val(N)))
-end
+Base.Tuple(a::OffsetTuple) = a.x
 
-n_offset_tuple(f, a::Tuple) = n_offset_tuple(f, Val(length(a)), Val(1))
-n_offset_tuple(f, a::OffsetTuple{O}) where {O} = n_offset_tuple(f, Val(length(a)), Val(O))
+tupleindices(a::Tuple) = ntuple(identity, length(a))
+function tupleindices(a::OffsetTuple{O}) where {O}
+    OffsetTuple{O}(ntuple(i -> i - 1 + O, length(a)))
+end
 
 Base.length(a::OffsetTuple) = length(a.x)
 Base.eachindex(a::OffsetTuple{O}) where {O} = (1:length(a)) .+ (O - 1)
 Base.getindex(a::OffsetTuple{O}, i::Integer) where {O} = a.x[i-O+1]
-Base.pairs(a::OffsetTuple{O}) where {O} = Base.Pairs(a, ntuple(i -> i - 1 + O, length(a)))
+Base.pairs(a::OffsetTuple{O}) where {O} = Base.Pairs(a, Tuple(tupleindices(a)))
 
 Base.map(f, a::OffsetTuple{O}) where {O} = OffsetTuple{O}(map(f, a.x))
 
