@@ -110,10 +110,10 @@ function (X::EigenbasisTransform)(yᵢ, ωᵢ, i)
     yᵢ
 end
 
-function coarsen!(ω², ω¹; n)
+function multidomain_coarsen!(ω², ω¹; n)
     for i in eachindex(ω²)
         R = _coarse_indices(Tuple(n), Loc_ω(i))
-        @loop ω²[i] (I in R) ω²[i][I] = coarsen(i, ω¹[i], I; n)
+        @loop ω²[i] (I in R) ω²[i][I] = multidomain_coarsen(i, ω¹[i], I; n)
     end
     ω²
 end
@@ -125,7 +125,7 @@ function _coarse_indices(n::NTuple{N}, loc::Edge{Dual}) where {N}
     end
 end
 
-function coarsen(i, ωᵢ, I²; n)
+function multidomain_coarsen(i, ωᵢ, I²; n)
     T = eltype(ωᵢ)
     stencil = _coarsen_stencil(T)
     s = zero(T)
@@ -159,15 +159,15 @@ function _fine_range(n::Int, I::Int)
     2(I - (n ÷ 4)) .+ (-1:1)
 end
 
-function interpolate_grid_bndry!(ω_b, ω; n)
+function multidomain_interpolate!(ω_b, ω; n)
     for i in eachindex(ω), (j, k) in each_other_axes(i), dir in 1:2
         b = ω_b[i][dir, k]
-        @loop b (I in b) b[I] = interpolate_grid_bndry(ω[i], (i, j, k), dir, I; n)
+        @loop b (I in b) b[I] = multidomain_interpolate(ω[i], (i, j, k), dir, I; n)
     end
     ω_b
 end
 
-function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{2}; n)
+function multidomain_interpolate(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{2}; n)
     δ = unit(2)
     I² = CartesianIndex(ntuple(dim -> n[dim] ÷ 4 + fld(I¹[dim], 2), 2))
     if iseven(I¹[j])
@@ -177,7 +177,7 @@ function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{2}; n
     end
 end
 
-function interpolate_grid_bndry(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{3}; n)
+function multidomain_interpolate(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{3}; n)
     δ = unit(3)
     n4 = Tuple(n) .÷ 4
     I² = CartesianIndex(

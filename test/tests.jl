@@ -14,8 +14,8 @@ using ImmersedBodies:
     LaplacianPlan,
     EigenbasisTransform,
     laplacian_plans,
-    coarsen!,
-    interpolate_grid_bndry!,
+    multidomain_coarsen!,
+    multidomain_interpolate!,
     AbstractDeltaFunc,
     support,
     DeltaYang3S,
@@ -424,7 +424,7 @@ function test_laplacian_inv(array, ::Val{3})
     nothing
 end
 
-function test_coarsen(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
+function test_multidomain_coarsen(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
     R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
     ω¹ = _gridarray(ω_true, array, grid, Loc_ω, R; level=1)
     ω²_expect = _gridarray(ω_true, array, grid, Loc_ω, R; level=2)
@@ -440,7 +440,7 @@ function test_coarsen(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
         @loop ω²_got[i] (I in R_inner) ω²_got[i][I] = 0
     end
 
-    coarsen!(ω²_got, ω¹; n=grid.n)
+    multidomain_coarsen!(ω²_got, ω¹; n=grid.n)
 
     @test all(
         i -> no_offset_view(ω²_got[i]) ≈ no_offset_view(ω²_expect[i]), eachindex(ω²_got)
@@ -449,25 +449,25 @@ function test_coarsen(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
     (; R, ω¹, ω²_expect, ω²_got)
 end
 
-function test_coarsen(array, ::Val{2})
+function test_multidomain_coarsen(array, ::Val{2})
     let grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3),
         ω = _rand_z(LinearFunc{3,Float64})
 
-        test_coarsen(array, grid, ω)
+        test_multidomain_coarsen(array, grid, ω)
     end
     nothing
 end
 
-function test_coarsen(array, ::Val{3})
+function test_multidomain_coarsen(array, ::Val{3})
     let grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3),
         ω = rand(LinearFunc{3,Float64})
 
-        test_coarsen(array, grid, ω)
+        test_multidomain_coarsen(array, grid, ω)
     end
     nothing
 end
 
-function test_interpolate_grid_bndry(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
+function test_multidomain_interpolate(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
     R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
     Rb = boundary_axes(grid.n, Loc_ω; dims=ntuple(identity, 3))
 
@@ -482,7 +482,7 @@ function test_interpolate_grid_bndry(array, grid::Grid{N}, ω_true::LinearFunc{3
 
     ω_b_got = map(a -> map(zero, a), ω_b_expect)
 
-    interpolate_grid_bndry!(ω_b_got, ω; n=grid.n)
+    multidomain_interpolate!(ω_b_got, ω; n=grid.n)
 
     @test all(
         i -> all(@. no_offset_view(ω_b_got[i]) ≈ no_offset_view(ω_b_expect[i])),
@@ -492,25 +492,25 @@ function test_interpolate_grid_bndry(array, grid::Grid{N}, ω_true::LinearFunc{3
     (; R, Rb, ω, ω_b_expect, ω_b_got)
 end
 
-function test_interpolate_grid_bndry(array, ::Val{2})
+function test_multidomain_interpolate(array, ::Val{2})
     let grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3),
         ω = _rand_z(LinearFunc{3,Float64})
 
-        test_interpolate_grid_bndry(array, grid, ω)
+        test_multidomain_interpolate(array, grid, ω)
     end
     nothing
 end
 
-function test_interpolate_grid_bndry(array, ::Val{3})
+function test_multidomain_interpolate(array, ::Val{3})
     let grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3),
         ω = rand(LinearFunc{3,Float64})
 
-        test_interpolate_grid_bndry(array, grid, ω)
+        test_multidomain_interpolate(array, grid, ω)
     end
     nothing
 end
 
-function test_regularize_interpolate(
+function test_regularization(
     array, grid::Grid{N}, u_true::LinearFunc{3}, xb::AbstractVector{<:SVector}
 ) where {N}
     backend = _backend(array)
@@ -539,7 +539,7 @@ function test_regularize_interpolate(
     (; reg, R, u, ub_expect, ub_got, fu, fb)
 end
 
-function test_regularize_interpolate(array, ::Val{2})
+function test_regularization(array, ::Val{2})
     let grid = Grid(; h=0.05, n=(80, 80), x0=(-2.0, -1.95), levels=3),
         u = _rand_xy(LinearFunc{3,Float64}),
         nb = 20,
@@ -547,12 +547,12 @@ function test_regularize_interpolate(array, ::Val{2})
             SVector(cos(t), sin(t))
         end
 
-        test_regularize_interpolate(array, grid, u, xb)
+        test_regularization(array, grid, u, xb)
     end
     nothing
 end
 
-function test_regularize_interpolate(array, ::Val{3})
+function test_regularization(array, ::Val{3})
     let grid = Grid(; h=0.05, n=(80, 80, 80), x0=(-2.0, -1.95, -2.05), levels=3),
         u = rand(LinearFunc{3,Float64}),
         nb = 20,
@@ -561,7 +561,7 @@ function test_regularize_interpolate(array, ::Val{3})
             SVector(cos(a), sin(a), 2t - 1)
         end
 
-        test_regularize_interpolate(array, grid, u, xb)
+        test_regularization(array, grid, u, xb)
     end
     nothing
 end

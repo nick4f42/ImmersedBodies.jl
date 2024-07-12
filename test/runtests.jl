@@ -22,9 +22,9 @@ AMDGPU.functional() && push!(arrays, AMDGPU.ROCArray)
             test_rot
             test_curl
             test_laplacian_inv
-            test_coarsen
-            test_interpolate_grid_bndry
-            test_regularize_interpolate
+            test_multidomain_coarsen
+            test_multidomain_interpolate
+            test_regularization
         ]
             @testset "$(nd)D" for nd in (2, 3)
                 test(array, Val(nd))
