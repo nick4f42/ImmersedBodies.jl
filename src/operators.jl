@@ -221,7 +221,9 @@ function (::DeltaYang3S)(r::AbstractFloat)
     end
 end
 
-struct Reg{D<:AbstractDeltaFunc,T,N,A<:AbstractArray{SVector{N,Int},2},M,W<:AbstractArray{T,M}}
+struct Reg{
+    D<:AbstractDeltaFunc,T,N,A<:AbstractArray{SVector{N,Int},2},M,W<:AbstractArray{T,M}
+}
     delta::D
     I::A
     weights::W
