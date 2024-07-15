@@ -50,7 +50,7 @@ struct LaplacianPlan{P1,P2,L<:AbstractArray}
 end
 
 function LaplacianPlan(ωᵢ, i, n::SVector{N}) where {N}
-    R = inner_cell_axes(n, Loc_ω(i))
+    R = cell_axes(n, Loc_ω(i), ExcludeBoundary())
     nω = length.(R)
     λ = OffsetArray(similar(ωᵢ, nω), R)
     laplacian_eigvals!(λ, i)

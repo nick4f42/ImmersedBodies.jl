@@ -4,8 +4,9 @@ using ImmersedBodies:
     unit,
     each_other_axes,
     tupleindices,
+    IncludeBoundary,
+    ExcludeBoundary,
     cell_axes,
-    inner_cell_axes,
     boundary_axes,
     OffsetTuple,
     nonlinear!,
@@ -192,22 +193,22 @@ function test_problems()
         @test coord(grid, Edge{Dual}(2), (1, 3), 2) ≈
             (x0 - n * h / 2) + 2h * SVector(1, 3.5)
 
-        @test cell_axes(grid.n, Edge{Dual}(3)) == (0:8, 0:4)
-        @test inner_cell_axes(grid.n, Edge{Dual}(3)) == (1:7, 1:3)
+        @test cell_axes(grid, Edge{Dual}(3), IncludeBoundary()) == (0:8, 0:4)
+        @test cell_axes(grid, Edge{Dual}(3), ExcludeBoundary()) == (1:7, 1:3)
 
-        @test cell_axes(grid.n, Edge{Primal}(1)) == (0:8, 0:3)
-        @test inner_cell_axes(grid.n, Edge{Primal}(1)) == (1:7, 0:3)
+        @test cell_axes(grid, Edge{Primal}(1), IncludeBoundary()) == (0:8, 0:3)
+        @test cell_axes(grid, Edge{Primal}(1), ExcludeBoundary()) == (1:7, 0:3)
     end
     let h = 0.25,
         n = SVector(8, 4, 12),
         x0 = SVector(10, 19, 5),
         grid = Grid(; h, n, x0, levels=5)
 
-        @test cell_axes(grid.n, Edge{Dual}(2)) == (0:8, 0:3, 0:12)
-        @test inner_cell_axes(grid.n, Edge{Dual}(2)) == (1:7, 0:3, 1:11)
+        @test cell_axes(grid, Edge{Dual}(2), IncludeBoundary()) == (0:8, 0:3, 0:12)
+        @test cell_axes(grid, Edge{Dual}(2), ExcludeBoundary()) == (1:7, 0:3, 1:11)
 
-        @test cell_axes(grid.n, Edge{Primal}(2)) == (0:7, 0:4, 0:11)
-        @test inner_cell_axes(grid.n, Edge{Primal}(2)) == (0:7, 1:3, 0:11)
+        @test cell_axes(grid, Edge{Primal}(2), IncludeBoundary()) == (0:7, 0:4, 0:11)
+        @test cell_axes(grid, Edge{Primal}(2), ExcludeBoundary()) == (0:7, 1:3, 0:11)
     end
 end
 
@@ -381,9 +382,9 @@ function test_laplacian_inv(array, grid::Grid{N}, ψ_true::LinearFunc{3,T}) wher
         @assert _is_z(ψ_true)
     end
 
-    Rψ = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
-    Rψb = ntuple(i -> cell_axes(grid.n, Loc_ω(i)), 3)
-    Ru = ntuple(i -> inner_cell_axes(grid.n, Loc_u(i)), 3)
+    Rψ = ntuple(i -> cell_axes(grid, Loc_ω(i), ExcludeBoundary()), 3)
+    Rψb = ntuple(i -> cell_axes(grid, Loc_ω(i), IncludeBoundary()), 3)
+    Ru = ntuple(i -> cell_axes(grid, Loc_u(i), ExcludeBoundary()), 3)
 
     ψ = _gridarray(ψ_true, array, grid, Loc_ω, Rψb)
     for i in eachindex(ψ),
@@ -433,7 +434,7 @@ function test_laplacian_inv(array, ::Val{3})
 end
 
 function test_multidomain_coarsen(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
-    R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
+    R = ntuple(i -> cell_axes(grid, Loc_ω(i), ExcludeBoundary()), 3)
     ω¹ = _gridarray(ω_true, array, grid, Loc_ω, R; level=1)
     ω²_expect = _gridarray(ω_true, array, grid, Loc_ω, R; level=2)
     ω²_got = map(copy, ω²_expect)
@@ -476,7 +477,7 @@ function test_multidomain_coarsen(array, ::Val{3})
 end
 
 function test_multidomain_interpolate(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
-    R = ntuple(i -> inner_cell_axes(grid.n, Loc_ω(i)), 3)
+    R = ntuple(i -> cell_axes(grid, Loc_ω(i), ExcludeBoundary()), 3)
     Rb = boundary_axes(grid.n, Loc_ω; dims=ntuple(identity, 3))
 
     ω = _gridarray(ω_true, array, grid, Loc_ω, R; level=2)
@@ -522,7 +523,7 @@ function test_regularization(
     reg = Reg(backend, T, DeltaYang3S(), nb, Val(N))
     update_weights!(reg, grid, 1:nb, xb)
 
-    R = ntuple(i -> inner_cell_axes(grid.n, Loc_u(i)), N)
+    R = ntuple(i -> cell_axes(grid, Loc_u(i), ExcludeBoundary()), N)
 
     u = _gridarray(u_true, array, grid, Loc_u, R)
 

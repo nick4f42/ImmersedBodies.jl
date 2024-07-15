@@ -46,20 +46,24 @@ coord(grid, loc, I, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
 _cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N)) / 2
 _cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N)) / 2
 
-function cell_axes(n::SVector{N}, loc) where {N}
+struct IncludeBoundary end
+struct ExcludeBoundary end
+
+function cell_axes(n::SVector{N}, loc, ::IncludeBoundary) where {N}
     ntuple(j -> _on_bndry(loc, j) ? (0:n[j]) : (0:n[j]-1), Val(N))
 end
 
-function inner_cell_axes(n::SVector{N}, loc) where {N}
-    a = cell_axes(n, loc)
-    ntuple(j -> _on_bndry(loc, j) ? a[j][2:end-1] : a[j], Val(N))
+function cell_axes(n::SVector{N}, loc, ::ExcludeBoundary) where {N}
+    ntuple(j -> _on_bndry(loc, j) ? (1:n[j]-1) : (0:n[j]-1), Val(N))
 end
+
+cell_axes(grid::Grid, args...) = cell_axes(grid.n, args...)
 
 _on_bndry((; i)::Edge{Primal}, j) = i == j
 _on_bndry((; i)::Edge{Dual}, j) = i ≠ j
 
 function boundary_axes(n::SVector{N}, loc::Edge) where {N}
-    a = cell_axes(n, loc)
+    a = cell_axes(n, loc, IncludeBoundary())
     (SArray ∘ map)(CartesianIndices(SOneTo.((2, N)))) do index
         dir, j = Tuple(index)
         if _on_bndry(loc, j)
@@ -75,6 +79,8 @@ end
 function boundary_axes(n::SVector{N}, loc::Type{<:Edge}; dims=ntuple(identity, N)) where {N}
     map(i -> boundary_axes(n, loc(i)), dims)
 end
+
+boundary_axes(grid::Grid, args...; kw...) = boundary_axes(grid.n, args...; kw...)
 
 """
     IrrotationalFlow
