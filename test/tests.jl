@@ -1,3 +1,5 @@
+module Tests
+
 using ImmersedBodies
 using ImmersedBodies:
     @loop,
@@ -35,8 +37,6 @@ using Random
 
 import FFTW
 import ImmersedBodies: FFT_R2R
-
-import CUDA, AMDGPU
 
 _backend(array) = get_backend(convert(array, [0]))
 
@@ -567,4 +567,6 @@ function test_regularization(array, ::Val{3})
         test_regularization(array, grid, u, xb)
     end
     nothing
+end
+
 end
