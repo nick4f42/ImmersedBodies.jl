@@ -27,6 +27,9 @@ function Adapt.adapt_structure(to, a::OffsetTuple{O}) where {O}
     OffsetTuple{O}(Adapt.adapt_structure(to, a.x))
 end
 
+_nd_tuple(a::AbstractVector) = Tuple(a)
+_nd_tuple(a::AbstractArray) = Tuple(map(i -> _nd_tuple(a[.., i]), axes(a, ndims(a))))
+
 struct Vec end
 struct VecZ end
 vec_kind(x::Tuple) = Vec()
@@ -53,6 +56,8 @@ function permute(f, i::Int, ::Vec, ::VecZ)
 end
 
 permute(f, i, a::VecZ, b::Vec) = permute((x, y) -> f(y, x), i, b, a)
+
+outward(dir) = 2dir - 3
 
 macro loop(backend, inds, ex)
     if !(
@@ -83,6 +88,11 @@ end
 
 _cartesianindices(I::CartesianIndices) = I
 _cartesianindices(I) = CartesianIndices(I)
+
+function _set!(b, a)
+    @loop b (i in b) b[i] = a[i]
+    b
+end
 
 # Non-allocating sum(map(f, a, b)) for arrays.
 function sum_map(f, a, b)

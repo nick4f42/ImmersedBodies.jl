@@ -19,6 +19,8 @@ using ImmersedBodies:
     laplacian_plans,
     multidomain_coarsen!,
     multidomain_interpolate!,
+    set_boundary!,
+    multidomain_poisson!,
     AbstractDeltaFunc,
     support,
     DeltaYang3S,
@@ -51,9 +53,11 @@ end
 _loc_axes(::Val{N}, loc::Type{<:Edge}) where {N} = ntuple(identity, N)
 _loc_axes(::Val{2}, loc::Type{Edge{Dual}}) = OffsetTuple{3}((3,))
 
-function _gridarray(f, array, grid::Grid{N}, loc::Type{<:Edge}, R; kw...) where {N}
-    map(_loc_axes(Val(N), loc)) do i
-        _gridarray(x -> f(x)[i], array, grid, loc(i), R[i]; kw...)
+function _gridarray(f, array, grid::Grid{N}, loc::Type{<:Edge}, R; level=1) where {N}
+    map(level) do lev
+        map(_loc_axes(Val(N), loc)) do i
+            _gridarray(x -> f(x)[i], array, grid, loc(i), R[i]; level=lev)
+        end
     end
 end
 
@@ -509,6 +513,124 @@ function test_multidomain_interpolate(array, ::Val{3})
         ω = rand(LinearFunc{3,Float64})
 
         test_multidomain_interpolate(array, grid, ω)
+    end
+    nothing
+end
+
+function test_set_boundary(array, grid::Grid{N}, ω_true::LinearFunc{3}) where {N}
+    R = cell_axes(grid, Loc_ω, IncludeBoundary())
+    Ri = cell_axes(grid, Loc_ω, ExcludeBoundary())
+
+    ω_expect = _gridarray(ω_true, array, grid, Loc_ω, R)
+
+    ω_got = _gridarray(x -> zero(SVector{3}), array, grid, Loc_ω, R)
+    for i in eachindex(ω_got)
+        a = ω_got[i]
+        @loop a (I in Ri[i]) a[I] = ω_true(coord(grid, Loc_ω(i), I))[i]
+    end
+
+    ω_b = _boundary_array(ω_true, array, grid, Loc_ω; level=1)
+
+    set_boundary!(ω_got, ω_b)
+
+    @test all(i -> no_offset_view(ω_got[i]) ≈ no_offset_view(ω_expect[i]), eachindex(ω_got))
+
+    (; R, Ri, ω_expect, ω_got, ω_b)
+end
+
+function test_set_boundary(array, ::Val{2})
+    let grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3),
+        ω = _rand_z(LinearFunc{3,Float64})
+
+        test_set_boundary(array, grid, ω)
+    end
+    nothing
+end
+
+function test_set_boundary(array, ::Val{3})
+    let grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3),
+        ω = rand(LinearFunc{3,Float64})
+
+        test_set_boundary(array, grid, ω)
+    end
+    nothing
+end
+
+function test_multidomain_poisson(array, grid::Grid{N}, ψ_true::LinearFunc{3,T}) where {N,T}
+    @assert _div(ψ_true) < eps(T)
+
+    if N == 2
+        @assert _is_z(ψ_true)
+    end
+
+    Rωi = cell_axes(grid, Loc_ω, IncludeBoundary())
+    Rωe = cell_axes(grid, Loc_ω, ExcludeBoundary())
+    Rui = cell_axes(grid, Loc_u, IncludeBoundary())
+    Rue = cell_axes(grid, Loc_u, ExcludeBoundary())
+
+    ψ_got = _gridarray(_ -> zero(SVector{3}), array, grid, Loc_ω, Rωi; level=1:grid.levels)
+    ψ_expect = _gridarray(ψ_true, array, grid, Loc_ω, Rωi; level=1:grid.levels)
+    u = _gridarray(_ -> _curl(ψ_true), array, grid, Loc_u, Rui; level=1:grid.levels)
+    ω = _gridarray(_ -> zero(SVector{3}), array, grid, Loc_ω, Rωe; level=1:grid.levels)
+
+    let lev = grid.levels,
+        h = gridstep(grid, lev),
+        ui = map(tupleindices(u[lev])) do i
+            R = CartesianIndices(Base.IdentityUnitRange.(Rue[i]))
+            @view u[lev][i][R]
+        end
+
+        for i in eachindex(ψ_expect[lev]), b in boundary_axes(grid, Loc_ω(i))
+            R = CartesianIndices(b)
+            a = ψ_expect[lev][i]
+            if !isempty(R)
+                @loop a (I in R) a[I] = 0
+            end
+        end
+
+        curl!(ui, ψ_expect[lev]; h)
+        rot!(ω[lev], u[lev]; h)
+    end
+
+    for lev in 2:grid.levels, (i, ωᵢ) in pairs(ω[lev])
+        R_inner = CartesianIndices(
+            ntuple(N) do j
+                n4 = grid.n[j] ÷ 4
+                i == j ? (n4:3n4-1) : (n4+1:3n4-1)
+            end,
+        )
+        @loop ωᵢ (I in R_inner) ωᵢ[I] = 999
+    end
+
+    ψ_b = _boundary_array(_ -> zero(SVector{3}), array, grid, Loc_ω)
+
+    plan = laplacian_plans(ω[1], grid.n)
+
+    multidomain_poisson!(ω, ψ_got, u, ψ_b, grid, plan)
+
+    @test all(eachindex(ψ_got)) do level
+        all(eachindex(ψ_got[level])) do i
+            no_offset_view(ψ_got[level][i]) ≈ no_offset_view(ψ_expect[level][i])
+        end
+    end
+
+    (; ψ_got, ψ_expect, u, ω, ψ_b, plan)
+end
+
+function test_multidomain_poisson(array, ::Val{2})
+    let grid = Grid(; h=0.05, n=(8, 16), x0=(-0.3, 0.4), levels=3),
+        ψ = _rand_z(LinearFunc{3,Float64})
+
+        test_multidomain_poisson(array, grid, ψ)
+    end
+    nothing
+end
+
+function test_multidomain_poisson(array, ::Val{3})
+    let grid = Grid(; h=0.05, n=(8, 16, 12), x0=(-0.3, 0.4, 0.1), levels=3),
+        ψ = _with_divergence(rand(LinearFunc{3,Float64}), 0)
+
+        test_multidomain_poisson(array, grid, ψ)
     end
     nothing
 end

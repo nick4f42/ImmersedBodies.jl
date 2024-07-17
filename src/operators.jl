@@ -42,8 +42,9 @@ function curl(i, ψ, I; h)
     end
 end
 
-struct LaplacianPlan{P1,P2,L<:AbstractArray}
+struct LaplacianPlan{P1,P2,L<:AbstractArray,W<:AbstractArray}
     λ::L
+    work::W
     fwd::P1
     inv::P2
     n_logical::Int
@@ -60,7 +61,7 @@ function LaplacianPlan(ωᵢ, i, n::SVector{N}) where {N}
     inv = FFT_R2R.plan_r2r!(ωᵢ, map(k -> FFTW.inv_kind[k], kind))
     n_logical = prod(map(FFTW.logical_size, nω, kind))
 
-    LaplacianPlan(λ, fwd, inv, n_logical)
+    LaplacianPlan(λ, similar(ωᵢ), fwd, inv, n_logical)
 end
 
 laplacian_fft_kind(i, nd) = ntuple(j -> i == j ? FFTW.REDFT01 : FFTW.RODFT00, nd)
@@ -102,12 +103,13 @@ end
 
 function (X::EigenbasisTransform)(yᵢ, ωᵢ, i)
     plan = X.plan[i]
-    let yᵢ = no_offset_view(yᵢ), ωᵢ = no_offset_view(ωᵢ), λ = no_offset_view(plan.λ)
-        mul!(yᵢ, plan.inv, ωᵢ)
-        @. yᵢ *= X.f(λ) / plan.n_logical
-        mul!(yᵢ, plan.fwd, yᵢ)
+    _set!(plan.work, ωᵢ)
+    let λ = no_offset_view(plan.λ), a = no_offset_view(plan.work)
+        mul!(a, plan.inv, a)
+        @. a *= X.f(λ) / plan.n_logical
+        mul!(a, plan.fwd, a)
     end
-    yᵢ
+    _set!(yᵢ, plan.work)
 end
 
 function multidomain_coarsen!(ω², ω¹; n)
@@ -194,6 +196,91 @@ function multidomain_interpolate(ωᵢ, (i, j, k), dir, I¹::CartesianIndex{3}; 
         (1 - a) * ωᵢ[I²] + a * ωᵢ[I²+δ(i)]
     else
         ((1 - a) * (ωᵢ[I²] + ωᵢ[I²+δ(j)]) + a * (ωᵢ[I²+δ(i)] + ωᵢ[I²+δ(i)+δ(j)])) / 2
+    end
+end
+
+function set_boundary!(ω, ω_b)
+    for i in eachindex(ω), b in ω_b[i]
+        if length(b) > 0
+            @loop b (I in b) ω[i][I] = b[I]
+        end
+    end
+    ω
+end
+
+function add_laplacian_bc!(Lψ, factor, ψ_b)
+    for i in eachindex(Lψ), j in 1:ndims(Lψ[i]), dir in 1:2
+        ax = UnitRange.(axes(Lψ[i]))
+        if i == j
+            let Iᵢ = (ax[i][begin], ax[i][end])[dir],
+                R = setindex(ax, Iᵢ:Iᵢ, i),
+                ψ_b = map(_nd_tuple, ψ_b)
+
+                @loop Lψ[i] (I in R) Lψ[i][I] += factor * laplacian_bc_ii(ψ_b, i, dir, I)
+            end
+        else
+            let b = ψ_b[i][dir, j],
+                rb = axes(b, j),
+                Iⱼ = (rb[begin], rb[end])[dir],
+                R = setindex(ax, Iⱼ:Iⱼ, j)
+
+                @loop b (I in R) begin
+                    δ = unit(length(I))
+                    Lψ[i][I-outward(dir)*δ(j)] += factor * b[I]
+                end
+            end
+        end
+    end
+end
+
+function laplacian_bc_ii(ψ_b, i, dir, I)
+    δ = unit(length(I))
+    T = eltype(ψ_b[3][1][1])
+    Iₒ = I + (dir - 1) * δ(i)
+    s = zero(T)
+    for (j, _) in each_other_axes(i)
+        b = ψ_b[j][i][dir]
+        s += b[Iₒ] - b[Iₒ-δ(j)]
+    end
+    -outward(dir) * s
+end
+
+function multidomain_poisson!(ω, ψ, u, ψ_b, grid::Grid, fft_plan)
+    Base.require_one_based_indexing(ψ)
+
+    for level in 2:grid.levels
+        multidomain_coarsen!(ω[level], ω[level-1]; n=grid.n)
+    end
+
+    for level in grid.levels:-1:1
+        h = gridstep(grid, level)
+        ψi = ψ[min(lastindex(ψ), level)]
+        ψe = _exclude_boundary(ψi, grid, Loc_ω)
+
+        if level == grid.levels
+            for i in eachindex(ψe)
+                _set!(ψe[i], ω[level][i])
+                foreach(b -> fill!(b, 0), ψ_b[i])
+            end
+        else
+            let ψci = ψ[min(lastindex(ψ), level + 1)],
+                ψce = _exclude_boundary(ψci, grid, Loc_ω)
+
+                multidomain_interpolate!(ψ_b, ψce; n=grid.n)
+            end
+            for i in eachindex(ψe)
+                _set!(ψe[i], ω[level][i])
+            end
+            add_laplacian_bc!(ψe, 1 / h^2, ψ_b)
+        end
+
+        EigenbasisTransform(λ -> -1 / (λ / h^2), fft_plan)(ψe, ψe)
+
+        set_boundary!(ψi, ψ_b)
+
+        if level in eachindex(u)
+            curl!(u[level], ψi; h)
+        end
     end
 end
 

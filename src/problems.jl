@@ -49,14 +49,17 @@ _cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N)) / 
 struct IncludeBoundary end
 struct ExcludeBoundary end
 
-function cell_axes(n::SVector{N}, loc, ::IncludeBoundary) where {N}
+function cell_axes(n::SVector{N}, loc::Edge, ::IncludeBoundary) where {N}
     ntuple(j -> _on_bndry(loc, j) ? (0:n[j]) : (0:n[j]-1), Val(N))
 end
 
-function cell_axes(n::SVector{N}, loc, ::ExcludeBoundary) where {N}
+function cell_axes(n::SVector{N}, loc::Edge, ::ExcludeBoundary) where {N}
     ntuple(j -> _on_bndry(loc, j) ? (1:n[j]-1) : (0:n[j]-1), Val(N))
 end
 
+function cell_axes(n::SVector, loc::Type{<:Edge}, args...)
+    ntuple(i -> cell_axes(n, loc(i), args...), 3)
+end
 cell_axes(grid::Grid, args...) = cell_axes(grid.n, args...)
 
 _on_bndry((; i)::Edge{Primal}, j) = i == j
@@ -81,6 +84,15 @@ function boundary_axes(n::SVector{N}, loc::Type{<:Edge}; dims=ntuple(identity, N
 end
 
 boundary_axes(grid::Grid, args...; kw...) = boundary_axes(grid.n, args...; kw...)
+
+function _exclude_boundary(a, grid, loc)
+    map(tupleindices(a)) do i
+        R = CartesianIndices(
+            Base.IdentityUnitRange.(cell_axes(grid, loc(i), ExcludeBoundary()))
+        )
+        @view a[i][R]
+    end
+end
 
 """
     IrrotationalFlow
