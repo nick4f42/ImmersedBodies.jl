@@ -64,6 +64,13 @@ function CNAB(
     end
 
     set_time!(sol, 0)
+    zero_vorticity!(sol)
+
+    sol
+end
+
+function zero_vorticity!(sol::CNAB)
+    grid = sol.prob.grid
 
     for level in 1:grid.levels
         for i in eachindex(sol.ω[level])
@@ -74,6 +81,8 @@ function CNAB(
             sol.u[level][i] .= 0
         end
     end
+
+    sol.nonlin_count = 0
 
     for level in eachindex(sol.u)
         add_flow!(sol.u[level], sol.prob.u0, grid, level, sol.i, sol.t)
@@ -294,4 +303,19 @@ function ab_coeffs(T, n)
     else
         throw(DomainError(n, "only n=1 and n=2 are supported"))
     end
+end
+
+function _f_tilde_factor(sol::CNAB{N}) where {N}
+    grid = sol.prob.grid
+    -grid.h^N / sol.dt
+end
+
+function surface_force!(f, sol::CNAB)
+    k = _f_tilde_factor(sol)
+    @. f = -k * sol.f_tilde
+end
+
+function surface_force_sum(sol::CNAB)
+    k = _f_tilde_factor(sol)
+    -k * sum(sol.f_tilde)
 end

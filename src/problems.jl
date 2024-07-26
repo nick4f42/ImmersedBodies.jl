@@ -211,3 +211,6 @@ struct IBProblem{N,T,B<:AbstractBody,U<:IrrotationalFlow}
     Re::T
     u0::U
 end
+
+function surface_force! end
+function surface_force_sum end
