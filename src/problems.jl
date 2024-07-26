@@ -41,10 +41,19 @@ function coord(grid::Grid, loc, I::SVector{N,<:Integer}, args...) where {N}
     x0 + h * (I + _cellcoord(loc, Val(N)))
 end
 
-coord(grid, loc, I, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
+coord(grid, loc, I::Tuple, args...) = coord(grid, loc, SVector(I), args...)
+coord(grid, loc, I::CartesianIndex, args...) = coord(grid, loc, SVector(Tuple(I)), args...)
 
 _cellcoord((; i)::Edge{Primal}, ::Val{N}) where {N} = SVector(ntuple(≠(i), N)) / 2
 _cellcoord((; i)::Edge{Dual}, ::Val{N}) where {N} = SVector(ntuple(==(i), N)) / 2
+
+function coord(grid, loc, r::Tuple{Vararg{AbstractRange}}, args...)
+    x1 = coord(grid, loc, first.(r), args...)
+    x2 = coord(grid, loc, last.(r), args...)
+    ntuple(length(r)) do i
+        range(x1[i], x2[i], length(r[i]))
+    end
+end
 
 struct IncludeBoundary end
 struct ExcludeBoundary end
