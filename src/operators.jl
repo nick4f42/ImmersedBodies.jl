@@ -328,8 +328,8 @@ function Reg(backend, T, delta, nb, ::Val{N}) where {N}
     Reg(delta, I, weights)
 end
 
-function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
-    @assert ndims(ibs) == 1 && axes(ibs) == axes(xbs)
+function update_weights!(reg::Reg, grid::Grid{N}, xbs) where {N}
+    ibs = eachindex(xbs)
     for i in 1:N
         @loop reg.weights (J in ibs) begin
             ib = J[1]
@@ -348,15 +348,19 @@ function update_weights!(reg::Reg, grid::Grid{N}, ibs, xbs) where {N}
     reg
 end
 
-function interpolate_body!(ub::AbstractMatrix, reg::Reg, u)
+function interpolate_body!(ub, reg::Reg{<:Any,T,N}, u) where {T,N}
     s = support(reg.delta)
     @loop ub (J in ub) begin
-        ib, i = Tuple(J)
-        w = @view reg.weights[.., ib, i]
-        Ib = reg.I[ib, i]
-        I = CartesianIndices(map(i -> i .+ (-s:s), Tuple(Ib)))
-        uᵢ = @view u[i][I]
-        ub[J] = dot(w, uᵢ)
+        ib = J[1]
+        ubJ = zero(MVector{N,T})
+        for i in 1:N
+            w = @view reg.weights[.., ib, i]
+            Ib = reg.I[ib, i]
+            I = CartesianIndices(map(i -> i .+ (-s:s), Tuple(Ib)))
+            uᵢ = @view u[i][I]
+            ubJ[i] = dot(w, uᵢ)
+        end
+        ub[J] = ubJ
     end
 end
 
@@ -364,16 +368,16 @@ function regularize!(fu, reg::Reg{<:Any,<:Any,N}, fb) where {N}
     R = axes(reg.weights)[1:N]
 
     for fuᵢ in fu
-        fuᵢ .= 0
+        @loop fuᵢ (I in fuᵢ) fuᵢ[I] = 0
     end
 
-    for J in CartesianIndices(fb)
-        ib, i = Tuple(J)
-        fuᵢ = fu[i]
-        @loop fuᵢ (K in R) begin
-            I0 = CartesianIndex(Tuple(reg.I[ib, i] .- (support(reg.delta) + 1)))
-            I = I0 + K
-            fuᵢ[I] += fb[J] * reg.weights[K, ib, i]
+    for ib in eachindex(fb)
+        @loop fu[1] (K in R) begin
+            for i in 1:N
+                I0 = CartesianIndex(Tuple(reg.I[ib, i] .- (support(reg.delta) + 1)))
+                I = I0 + K
+                fu[i][I] += fb[ib][i] * reg.weights[K, ib, i]
+            end
         end
     end
 

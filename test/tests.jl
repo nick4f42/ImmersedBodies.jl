@@ -9,6 +9,8 @@ using ImmersedBodies:
     IncludeBoundary,
     ExcludeBoundary,
     cell_axes,
+    edge_axes,
+    grid_view,
     boundary_axes,
     OffsetTuple,
     nonlinear!,
@@ -27,7 +29,10 @@ using ImmersedBodies:
     Reg,
     update_weights!,
     interpolate_body!,
-    regularize!
+    regularize!,
+    IBProblem,
+    CNAB,
+    step!
 using KernelAbstractions
 using GPUArrays
 using OffsetArrays: OffsetArray, no_offset_view
@@ -50,12 +55,9 @@ function _gridarray(f, array, grid, loc, R::Tuple{Vararg{AbstractRange}}; level=
     OffsetArray(convert(array, a), R)
 end
 
-_loc_axes(::Val{N}, loc::Type{<:Edge}) where {N} = ntuple(identity, N)
-_loc_axes(::Val{2}, loc::Type{Edge{Dual}}) = OffsetTuple{3}((3,))
-
 function _gridarray(f, array, grid::Grid{N}, loc::Type{<:Edge}, R; level=1) where {N}
     map(level) do lev
-        map(_loc_axes(Val(N), loc)) do i
+        map(edge_axes(Val(N), loc)) do i
             _gridarray(x -> f(x)[i], array, grid, loc(i), R[i]; level=lev)
         end
     end
@@ -63,7 +65,7 @@ end
 
 function _boundary_array(f, array, grid::Grid{N}, loc; kw...) where {N}
     Rb = boundary_axes(grid.n, loc; dims=ntuple(identity, 3))
-    map(_loc_axes(Val(N), loc)) do i
+    map(edge_axes(Val(N), loc)) do i
         (SArray ∘ map)(CartesianIndices(Rb[i])) do index
             dir, j = Tuple(index)
             _gridarray(x -> f(x)[i], array, grid, loc(i), Rb[i][dir, j]; kw...)
@@ -643,20 +645,21 @@ function test_regularization(
     nb = length(xb)
 
     reg = Reg(backend, T, DeltaYang3S(), nb, Val(N))
-    update_weights!(reg, grid, 1:nb, xb)
+    update_weights!(reg, grid, xb)
 
     R = ntuple(i -> cell_axes(grid, Loc_u(i), ExcludeBoundary()), N)
 
     u = _gridarray(u_true, array, grid, Loc_u, R)
 
-    ub_expect = (permutedims ∘ stack ∘ map)(x -> u_true(x)[1:N], Array(xb))
-    ub_got = KernelAbstractions.zeros(backend, T, nb, N)
+    ub_expect = map(x -> u_true(x)[1:N], Array(xb))
+    ub_got = KernelAbstractions.zeros(backend, SVector{N,T}, nb)
     interpolate_body!(ub_got, reg, u)
 
     @test Array(ub_got) ≈ ub_expect
 
     fu = _gridarray(x -> zero(SVector{N}), array, grid, Loc_u, R)
-    fb = KernelAbstractions.ones(backend, T, nb, N)
+    fb = KernelAbstractions.allocate(backend, SVector{N,T}, nb)
+    fill!(fb, 1 .+ zero(SVector{N,T}))
     regularize!(fu, reg, fb)
 
     @test all(@. sum(no_offset_view(fu)) ≈ nb)
@@ -689,6 +692,111 @@ function test_regularization(array, ::Val{3})
         test_regularization(array, grid, u, xb)
     end
     nothing
+end
+
+function test_cnab(array, prob::IBProblem{N,T}) where {N,T}
+    backend = _backend(array)
+    sol = CNAB(prob; dt=T(0.02), backend)
+    grid = sol.prob.grid
+    u_work = grid_view(sol.u_work, grid, Loc_u, ExcludeBoundary())
+    ω_work = grid_view(sol.ω_work, grid, Loc_ω, ExcludeBoundary())
+
+    # Make sure some vorticity is at the multi-domain boundary.
+    for i in 1:50
+        step!(sol)
+    end
+
+    sol0 = map(1:length(sol.β)) do _
+        s = deepcopy((; u=sol.u[1], ω=sol.ω[1]))
+        step!(sol)
+        s
+    end
+
+    interpolate_body!(sol.f_work, sol.reg, sol.u[1])
+    unflatten(x) = reinterpret(reshape, T, x)
+    @test unflatten(sol.f_work) ≈ unflatten(sol.ib.u) atol = sqrt(eps(T))
+
+    ω = grid_view(deepcopy(sol0[end].ω), grid, Loc_ω, ExcludeBoundary())
+
+    for i_step in eachindex(sol0)
+        nonlinear!(u_work, sol0[i_step].u, sol0[i_step].ω)
+        rot!(ω_work, u_work; h=grid.h)
+        for i in eachindex(ω)
+            let ω = ω[i], ω_work = ω_work[i], k = sol.dt * sol.β[i_step]
+                @loop ω (I in ω) ω[I] += k * ω_work[I]
+            end
+        end
+    end
+
+    for i in eachindex(ω)
+        let ω0 = sol0[end].ω[i], ω1 = sol.ω[1][i], ω_work = sol.ω_work[i]
+            @loop ω0 (I in ω0) ω_work[I] = ω0[I] + ω1[I]
+        end
+    end
+
+    curl!(u_work, sol.ω_work; h=grid.h)
+    rot!(ω_work, u_work; h=grid.h)
+
+    for i in eachindex(ω)
+        let ω = ω[i], ω_work = ω_work[i], k = sol.dt / (2sol.prob.Re)
+            @loop ω (I in ω) ω[I] -= k * ω_work[I]
+        end
+    end
+
+    regularize!(u_work, sol.reg, sol.f_tilde)
+    rot!(ω_work, u_work; h=grid.h)
+
+    for i in eachindex(ω)
+        let ω = ω[i], ω_work = ω_work[i]
+            @loop ω (I in ω) ω[I] -= ω_work[I]
+        end
+    end
+
+    let ω_got = grid_view(sol.ω[1], grid, Loc_ω, ExcludeBoundary()), ω_expect = ω
+        @test all(eachindex(ω_got)) do i
+            approx = OffsetArray(
+                KernelAbstractions.zeros(backend, Bool, size(ω_got[i])...),
+                axes(ω_got[i]),
+            )
+            let ω_got = ω_got[i], ω_expect = ω_expect[i], atol = sqrt(eps(T))
+                @loop ω_got (I in ω_got) approx[I] = isapprox(ω_got[I], ω_expect[I]; atol)
+            end
+            all(no_offset_view(approx))
+        end
+
+        (; sol, sol0, ω_got, ω_expect)
+    end
+end
+
+function test_cnab(array, ::Val{2})
+    let grid = Grid(; h=0.1, n=(40, 40), x0=(-2.0, -1.95), levels=3),
+        nb = 20,
+        xb = (array ∘ map)(range(0, 2π, nb)) do t
+            SVector(cos(t), sin(t))
+        end,
+        body = StaticBody(xb),
+        Re = 50.0,
+        u0 = UniformFlow(t -> SVector{2,Float64}(1, 0)),
+        prob = IBProblem(grid, body, Re, u0)
+
+        test_cnab(array, prob)
+    end
+end
+
+function test_cnab(array, ::Val{3})
+    let grid = Grid(; h=0.1, n=(40, 40, 40), x0=(-2.0, -1.95, -2.05), levels=3),
+        nb = 30,
+        xb = (array ∘ map)(range(0, 1, nb)) do t
+            a = 2π * t
+            SVector(cos(a), sin(a), 2t - 1)
+        end,
+        body = StaticBody(xb),
+        Re = 50.0,
+        u0 = UniformFlow(t -> SVector{3,Float64}(1, 0, 0)),
+        prob = IBProblem(grid, body, Re, u0)
+
+        test_cnab(array, prob)
+    end
 end
 
 end

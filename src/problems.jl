@@ -94,6 +94,44 @@ function _exclude_boundary(a, grid, loc)
     end
 end
 
+edge_axes(::Val{N}, loc::Type{<:Edge}) where {N} = ntuple(identity, N)
+edge_axes(::Val{2}, loc::Type{Edge{Dual}}) = OffsetTuple{3}((3,))
+
+function grid_zeros(
+    backend, grid::Grid{N,T}, loc::GridLocation, bndry=IncludeBoundary()
+) where {N,T}
+    R = cell_axes(grid, loc, bndry)
+    OffsetArray(KernelAbstractions.zeros(backend, T, length.(R)), R)
+end
+
+function grid_zeros(backend, grid::Grid{N}, loc::Type{<:Edge}, args...; levels=1) where {N}
+    map(levels) do _
+        map(edge_axes(Val(N), loc)) do i
+            grid_zeros(backend, grid, loc(i), args...)
+        end
+    end
+end
+
+function boundary_zeros(backend, grid::Grid{N,T}, loc) where {N,T}
+    dims = edge_axes(Val(N), loc)
+    Rb = boundary_axes(grid, loc; dims)
+    map(dims) do i
+        (SArray ∘ map)(CartesianIndices(Rb[i])) do index
+            dir, j = Tuple(index)
+            r = Rb[i][dir, j]
+            OffsetArray(KernelAbstractions.zeros(backend, T, length.(r)), r)
+        end
+    end
+end
+
+function grid_view(a, grid, loc, bndry)
+    R = cell_axes(grid, loc, bndry)
+    map(tupleindices(a)) do i
+        r = CartesianIndices(Base.IdentityUnitRange.(R[i]))
+        @view a[i][r]
+    end
+end
+
 """
     IrrotationalFlow
 
@@ -110,6 +148,29 @@ struct UniformFlow{U} <: IrrotationalFlow
     u::U
 end
 
+function add_flow!(u, flow::UniformFlow, grid, level, i, t)
+    u0 = flow.u(t)
+    for i in eachindex(u)
+        let u = u[i], u0 = u0[i]
+            @loop u (I in u) u[I] += u0
+        end
+    end
+    u
+end
+
+mutable struct ImmersedBody{N,T,A<:AbstractVector{SVector{N,T}}}
+    r::UnitRange{Int}
+    const x::A
+    const u::A
+end
+
+function ImmersedBody{N,T}(backend, n_max) where {N,T}
+    x, u = ntuple(2) do _
+        KernelAbstractions.zeros(backend, SVector{N,T}, n_max)
+    end
+    ImmersedBody(1:n_max, x, u)
+end
+
 """
     AbstractBody
 
@@ -118,25 +179,27 @@ flow velocity in a small region near each point.
 """
 abstract type AbstractBody end
 
-"""
-    PrescribedBody
+abstract type AbstractPrescribedBody <: AbstractBody end
 
-A body whose shape is prescribed independently from the fluid flow.
-"""
-abstract type PrescribedBody <: AbstractBody end
+abstract type AbstractStaticBody <: AbstractPrescribedBody end
 
-"""
-    StaticBody(xb::AbstractVector{<:SVector})
+struct StaticBody{N,T,A<:AbstractVector{SVector{N,T}}} <: AbstractStaticBody
+    x::A
+end
 
-A body of time-constant points `xb`.
-"""
-struct StaticBody{A<:AbstractVector{<:SVector}} <: PrescribedBody
-    xb::A
+maxpoints(body::StaticBody) = length(body.x)
+
+function init_body!(ib::ImmersedBody, body::StaticBody)
+    copy!(ib.x, body.x)
+end
+
+function update_body!(ib::ImmersedBody, body::StaticBody, i, t)
+    fill!(ib.u, zero(eltype(ib.u)))
 end
 
 struct IBProblem{N,T,B<:AbstractBody,U<:IrrotationalFlow}
     grid::Grid{N,T}
-    bodies::Vector{B}
+    body::B
     Re::T
     u0::U
 end

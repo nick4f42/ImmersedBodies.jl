@@ -7,6 +7,7 @@ using OffsetArrays
 using OffsetArrays: no_offset_view
 using KernelAbstractions
 using EllipsisNotation
+using LinearMaps
 import Adapt
 import FFTW
 
@@ -22,5 +23,6 @@ include("fft-r2r.jl")
 include("utils.jl")
 include("problems.jl")
 include("operators.jl")
+include("cnab.jl")
 
 end

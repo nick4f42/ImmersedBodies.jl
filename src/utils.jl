@@ -59,6 +59,8 @@ permute(f, i, a::VecZ, b::Vec) = permute((x, y) -> f(y, x), i, b, a)
 
 outward(dir) = 2dir - 3
 
+_cycle!(a::Vector) = length(a) < 2 ? a : pushfirst!(a, pop!(a))
+
 macro loop(backend, inds, ex)
     if !(
         inds isa Expr &&
