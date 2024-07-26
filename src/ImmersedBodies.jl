@@ -18,6 +18,7 @@ export Grid, gridcorner, gridstep, coord, cell_axes
 export IrrotationalFlow, UniformFlow
 export AbstractBody, PrescribedBody, StaticBody
 export IBProblem
+export step!, CNAB
 
 include("fft-r2r.jl")
 include("utils.jl")
