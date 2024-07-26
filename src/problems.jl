@@ -168,7 +168,6 @@ function add_flow!(u, flow::UniformFlow, grid, level, i, t)
 end
 
 mutable struct ImmersedBody{N,T,A<:AbstractVector{SVector{N,T}}}
-    r::UnitRange{Int}
     const x::A
     const u::A
 end
@@ -177,7 +176,7 @@ function ImmersedBody{N,T}(backend, n_max) where {N,T}
     x, u = ntuple(2) do _
         KernelAbstractions.zeros(backend, SVector{N,T}, n_max)
     end
-    ImmersedBody(1:n_max, x, u)
+    ImmersedBody(x, u)
 end
 
 """
