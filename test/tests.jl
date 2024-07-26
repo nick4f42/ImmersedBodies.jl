@@ -755,8 +755,7 @@ function test_cnab(array, prob::IBProblem{N,T}) where {N,T}
     let ω_got = grid_view(sol.ω[1], grid, Loc_ω, ExcludeBoundary()), ω_expect = ω
         @test all(eachindex(ω_got)) do i
             approx = OffsetArray(
-                KernelAbstractions.zeros(backend, Bool, size(ω_got[i])...),
-                axes(ω_got[i]),
+                KernelAbstractions.zeros(backend, Bool, size(ω_got[i])...), axes(ω_got[i])
             )
             let ω_got = ω_got[i], ω_expect = ω_expect[i], atol = sqrt(eps(T))
                 @loop ω_got (I in ω_got) approx[I] = isapprox(ω_got[I], ω_expect[I]; atol)
