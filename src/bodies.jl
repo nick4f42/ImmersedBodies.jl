@@ -10,9 +10,9 @@ using LinearAlgebra
 
 using StaticArrays
 
-export AbstractBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
+export AbstractBody, AbstractPrescribedBody, BodyGroup, Panels, PanelView, npanels, bodypanels, deformation
 export AbstractBodyPoint, BodyPointIndex, BodyPointParam
-export RigidBody, DeformingBody, EulerBernoulliBeam, is_static
+export RigidBody, PrescribedBody, DeformingBody, EulerBernoulliBeam, is_static
 export SpringedMembrane, diatomic_phononic_material
 export DeformingBodyBC, bc_point, ClampBC, PinBC
 export reference_pos, n_variables, deforming
@@ -33,6 +33,8 @@ const VectorView{T} = SubArray{T,1,Vector{T},Tuple{UnitRange{Int}},true}
 A structural body.
 """
 abstract type AbstractBody end
+
+abstract type AbstractPrescribedBody <: AbstractBody end
 
 """
     AbstractBodyPoint
@@ -104,7 +106,7 @@ A rigid body with optional prescribed motion.
 - `len`: Segment length at each point in `pos`.
 - `motion`: Prescribed motion of the body.
 """
-struct RigidBody{F<:AbstractFrame} <: AbstractBody
+struct RigidBody{F<:AbstractFrame} <: AbstractPrescribedBody
     pos::Matrix{Float64} # panel positions
     len::Vector{Float64} # panel lengths
     frame::F # prescribed motion
@@ -147,6 +149,20 @@ function _show(io::IO, body::RigidBody, prefix)
 
     return nothing
 end
+
+struct PrescribedBody{F1,F2,F3} <: AbstractPrescribedBody
+    n_panels::Int
+    x::F1
+    v::F2
+    ds::F3
+end
+
+initial_pos!(xb, body::PrescribedBody) = body.x(xb, 0)
+initial_lengths!(ds, body::PrescribedBody) = body.ds(ds, 0)
+
+npanels(body::PrescribedBody) = body.n_panels
+
+is_static(::PrescribedBody, _) = false
 
 abstract type DeformingBody <: AbstractBody end
 
@@ -560,6 +576,17 @@ function prescribe_motion!(
         r .= r0 + Rx * rb
         v .= v0 + Rv * rb
     end
+
+    return nothing
+end
+
+function prescribe_motion!(
+    panels::PanelView, ::GlobalFrame,
+    body::PrescribedBody, t::Float64
+)
+    body.x(panels.pos, t)
+    body.v(panels.vel, t)
+    body.ds(panels.len, t)
 
     return nothing
 end

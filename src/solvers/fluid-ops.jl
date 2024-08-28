@@ -561,7 +561,7 @@ function B_Times(fluid::PsiOmegaFluidGrid, vort2flux::Vort2Flux, Γtmp, qtmp; Ai
     return B_Times(vort2flux, Ainv, C, E, Γtmp, qtmp, Γ, ψ, q)
 end
 
-function B_linearmap(bodies::BodyGroup{<:RigidBody}, B_times::B_Times)
+function B_linearmap(bodies::BodyGroup{<:AbstractPrescribedBody}, B_times::B_Times)
     nftot = 2 * npanels(bodies)
     return LinearMap(B_times, nftot; issymmetric=true)
 end
@@ -598,7 +598,7 @@ function Binv_linearmap(prob::StaticBodyProblem{CNAB}, B)
     # return LinearMap((y, x) -> ldiv!(y, B_decomp, x), nftot; issymmetric=true)
 end
 
-function Binv_linearmap(prob::Problem{<:PsiOmegaFluidGrid,<:RigidBody}, B)
+function Binv_linearmap(prob::Problem{<:PsiOmegaFluidGrid,<:AbstractPrescribedBody}, B)
     nftot = 2 * npanels(prob.bodies)
 
     # Solves f = B*g for g... so g = Binv * f

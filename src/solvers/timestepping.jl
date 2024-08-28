@@ -182,7 +182,7 @@ function SolverPsiOmegaGridCNAB(
         prob, nonlinear, vort2flux, As, Ainvs, rhsbc=Γtmp2, rhs=Γtmp3, bc=Γbc
     )
 
-    couple_surface = if prob.bodies isa BodyGroup{<:RigidBody}
+    couple_surface = if prob.bodies isa BodyGroup{<:AbstractPrescribedBody}
         Binv = Binv_linearmap(prob, B)
         RigidSurfaceCoupler(; basegrid=basegrid, Binv, E, Ftmp=Ftmp, Q=qtmp1)
     else
@@ -205,7 +205,7 @@ function prescribe_motion!(state::StatePsiOmegaGridCNAB, solver::SolverPsiOmegaG
     panels = quantities(state).panels
 
     for (i, (bodypanels, body)) in enumerate(zip(panels.perbody, bodies))
-        if body isa RigidBody && !is_static(body, fluidframe)
+        if body isa AbstractPrescribedBody && !is_static(body, fluidframe)
             prescribe_motion!(bodypanels, fluidframe, body, state.t)
             update!(solver.reg, bodypanels, i)
         end
